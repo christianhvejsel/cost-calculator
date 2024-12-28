@@ -29,7 +29,7 @@ METRIC_UNITS = {
     'Variable O&M Cost': '$, Millions',
     'Total Operating Costs': '$, Millions',
     'EBITDA': '$, Millions',
-    'Debt Outstanding - Start of Period': '$, Millions',
+    'Debt Outstanding, Yr Start': '$, Millions',
     'Interest Expense': '$, Millions',
     'Principal Payment': '$, Millions',
     'Debt Service': '$, Millions',
@@ -115,7 +115,7 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
             'EBITDA'
         ],
         'Debt': [
-            'Debt Outstanding - Start of Period',
+            'Debt Outstanding, Yr Start',
             'Interest Expense',
             'Principal Payment',
             'Debt Service'
@@ -186,94 +186,8 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
         st.error("No matching simulation data found for the selected inputs.")
         return
     
-    # Define groups and their metrics
-    groups = {
-        'Consumption': [
-            'Operating Year',
-            'Solar Output - Raw (MWh)',
-            'Solar Output - Net (MWh)',
-            'BESS Throughput (MWh)',
-            'BESS Net Output (MWh)',
-            'Generator Output (MWh)',
-            'Generator Fuel Input (MMBtu)',
-            'Load Served (MWh)'
-        ],
-        'Rates': [
-            'Fuel Unit Cost',
-            'Solar Fixed O&M Rate',
-            'Battery Fixed O&M Rate',
-            'Generator Fixed O&M Rate',
-            'Generator Variable O&M Rate',
-            'BOS Fixed O&M Rate',
-            'Soft O&M Rate'
-        ],
-        'Earnings': [
-            'LCOE',
-            'Revenue',
-            'Fuel Cost',
-            'Fixed O&M Cost',
-            'Variable O&M Cost',
-            'Total Operating Costs',
-            'EBITDA'
-        ],
-        'Debt': [
-            'Debt Outstanding - Start of Period',
-            'Interest Expense',
-            'Principal Payment',
-            'Debt Service'
-        ],
-        'Tax': [
-            'Depreciation Schedule',
-            'Depreciation (MACRS)',
-            'Interest Expense',
-            'Taxable Income',
-            'Federal ITC',
-            'Tax Benefit (Liability)'
-        ],
-        'Capital': [
-            'Capital Expenditure',
-            'Debt Contribution',
-            'Equity Capex'
-        ],
-        'Returns': [
-            'After-Tax Net Equity Cash Flow'
-        ]
-    }
-    
-    # Create the display DataFrame with groups
-    rows = []
-    
-    # Add header row
-    rows.append({
-        'Group': 'Year',
-        'Metric': '',
-        'Units': '',
-        **{str(year): year for year in proforma.index}
-    })
-    
-    # Add metrics by group
-    for group, metrics in groups.items():
-        # Add group header
-        rows.append({
-            'Group': group,
-            'Metric': '',
-            'Units': '',
-            **{str(year): '' for year in proforma.index}
-        })
-        
-        # Add metrics in the group
-        for metric in metrics:
-            if metric in proforma.columns:
-                rows.append({
-                    'Group': '',
-                    'Metric': metric,
-                    'Units': METRIC_UNITS.get(metric, ''),
-                    **{str(year): proforma.loc[year, metric] if year in proforma.index else None 
-                       for year in proforma.index}
-                })
-    
     # Create DataFrame
-    display_df = pd.DataFrame(rows)
+    display_df = proforma
     
     # Create a style function for negative numbers
     def style_negative(val):
@@ -295,10 +209,16 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
             return val
             
         row_idx = mask.idxmax()
+        metric = display_df.loc[row_idx, 'Metric']
         unit = display_df.loc[row_idx, 'Units']
+        group = display_df.loc[row_idx, 'Group']
         
         is_negative = val < 0
         abs_val = abs(val)
+        
+        # Special case for Year row
+        if group == 'Year':
+            return f"{int(abs_val)}"
         
         # Format based on unit type
         if unit in ['MWh', 'MMBtu']:

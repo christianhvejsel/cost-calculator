@@ -3,286 +3,22 @@
 import streamlit as st
 import pandas as pd
 from data_loader import load_simulation_data, get_unique_values
-from calculations import calculate_pro_forma
+from calculations import calculate_pro_forma, calculate_capex
 from st_formatting import format_proforma, display_proforma
 from charts import create_capacity_chart, create_capex_chart, create_energy_mix_chart
+from inputs import create_input_sections
 from typing import Dict
+
 
 def init_data():
     """Initialize data and unique values."""
     try:
         df = load_simulation_data()
-        return df, get_unique_values(df)
+        unique_values = get_unique_values(df)
+        return df, unique_values
     except FileNotFoundError as e:
         st.error(str(e))
         st.stop()
-
-def create_input_sections():
-    """Create all input sections in the Streamlit app."""
-    st.title("Solar Datacenter LCOE Calculator", anchor=False)
-    
-    # System Capacity Inputs
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        datacenter_load = st.number_input("Data Center Demand (MW)", 
-                                          value=100, 
-                                          min_value=0,
-                                          step=100,
-                                          format="%d")
-    with col2:
-        solar_pv_capacity = st.selectbox(
-            "Solar PV Capacity (MW-DC)",
-            options=unique_values['solar_capacities']
-        )
-    with col3:
-        bess_max_power = st.selectbox(
-            "BESS Max Power (MW), 4h store",
-            options=unique_values['bess_capacities']
-        )
-    with col4:
-        natural_gas_capacity = st.selectbox(
-            "Natural Gas Capacity (MW)",
-            options=unique_values['generator_capacities']
-        )
-    
-    # Display capacity chart
-    st.plotly_chart(
-        create_capacity_chart(datacenter_load, solar_pv_capacity, bess_max_power, natural_gas_capacity),
-        use_container_width=True
-    )
-    
-    # Non-megawatt configuration inputs
-    col1, col2 = st.columns(2)
-    with col1:
-        location = st.selectbox("Location", options=unique_values['locations'])
-    with col2:
-        generator_type = st.selectbox("Generator Type", ["Gas Engine", "Gas Turbine", "Diesel Generator"], index=0)
-    
-    # Financial Inputs
-    with st.expander("Financial Inputs"):
-        col1, col2 = st.columns(2)
-        with col1:
-            lcoe = st.number_input("LCOE ($/MWh)", value=107.35, format="%.2f")
-            cost_of_debt = st.number_input("Cost of Debt (%)", value=7.5, min_value=0.0, max_value=100.0)
-            leverage = st.number_input("Leverage (%)", value=70.0, min_value=0.0, max_value=100.0)
-            debt_term = st.number_input("Debt Term (years)", value=20, min_value=1)
-        with col2:
-            cost_of_equity = st.number_input("Cost of Equity (%)", value=11.0, min_value=0.0, max_value=100.0)
-            investment_tax_credit = st.number_input("Investment Tax Credit (%)", value=30.0, min_value=0.0, max_value=100.0)
-            combined_tax_rate = st.number_input("Combined Tax Rate (%)", value=21.0, min_value=0.0, max_value=100.0)
-    
-    # CAPEX Inputs
-    with st.expander("CAPEX Inputs"):
-        construction_time = st.number_input("Construction Time (years)", value=2, min_value=1)
-        
-        # Solar PV
-        st.subheader("Solar PV")
-        col1, col2 = st.columns(2)
-        with col1:
-            modules = st.number_input("Modules ($/W)", value=0.220, format="%.3f")
-            inverters = st.number_input("Inverters ($/W)", value=0.050, format="%.3f")
-            racking = st.number_input("Racking and Foundations ($/W)", value=0.180, format="%.3f")
-        with col2:
-            balance_system = st.number_input("Balance of System ($/W)", value=0.120, format="%.3f")
-            labor = st.number_input("Labor ($/W)", value=0.200, format="%.3f")
-    
-        # BESS
-        st.subheader("Battery Energy Storage System")
-        col1, col2 = st.columns(2)
-        with col1:
-            bess_units = st.number_input("BESS Units ($/kWh)", value=200, format="%d")
-            bess_bos = st.number_input("Balance of System ($/kWh)", value=40, format="%d")
-        with col2:
-            bess_labor = st.number_input("Labor ($/kWh)", value=20, format="%d")
-
-        # Generators
-        st.subheader("Generators")
-        col1, col2 = st.columns(2)
-        with col1:
-            gensets = st.number_input("Gensets ($/kW)", value=800, format="%d")
-            gen_bos = st.number_input("Balance of System ($/kW)", value=200, format="%d")
-        with col2:
-            gen_labor = st.number_input("Labor ($/kW)", value=150, format="%d")
-
-        # System Integration
-        st.subheader("System Integration")
-        col1, col2 = st.columns(2)
-        with col1:
-            microgrid = st.number_input("Microgrid Switchgear, Transformers, etc. ($/kW)", value=300, format="%d")
-            controls = st.number_input("Controls ($/kW)", value=50, format="%d")
-        with col2:
-            si_labor = st.number_input("System Integration Labor ($/kW)", value=60, format="%d")
-
-        # Soft Costs
-        st.subheader("Soft Costs (CAPEX)")
-        col1, col2 = st.columns(2)
-        with col1:
-            general_conditions = st.number_input("General Conditions (%)", value=0.50, format="%.2f")
-            epc_overhead = st.number_input("EPC Overhead (%)", value=5.00, format="%.2f")
-            design_engineering = st.number_input("Design, Engineering, and Surveys (%)", value=0.50, format="%.2f")
-        with col2:
-            permitting = st.number_input("Permitting & Inspection (%)", value=0.05, format="%.2f")
-            startup = st.number_input("Startup & Commissioning (%)", value=0.25, format="%.2f")
-            insurance = st.number_input("Insurance (%)", value=0.50, format="%.2f")
-            taxes = st.number_input("Taxes (%)", value=5.00, format="%.2f")
-    
-    # O&M Inputs
-    with st.expander("O&M Inputs"):
-        col1, col2 = st.columns(2)
-        with col1:
-            solar_om_fixed = st.number_input("Solar Fixed O&M ($/kW)", value=11, format="%d")
-            bess_om_fixed = st.number_input("BESS Fixed O&M ($/kW)", value=2.5, format="%.1f")
-            bos_om_fixed = st.number_input("BOS Fixed O&M ($/kW-load)", value=6.0, format="%.1f")
-            soft_om_pct = st.number_input("Soft O&M (% of hard capex)", value=0.25, format="%.2f")
-            
-            # Generator O&M costs based on type
-            if generator_type == "Gas Engine":
-                generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
-                generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
-            elif generator_type == "Gas Turbine":
-                generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
-                generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
-            else:  # Diesel Generator
-                generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
-                generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
-            
-            om_escalator = st.number_input("O&M Escalator (% p.a.)", value=2.50, min_value=0.0)
-        with col2:
-            fuel_price = st.number_input("Fuel Price ($/MMBtu)", value=5.00, min_value=0.0)
-            fuel_escalator = st.number_input("Fuel Escalator (% p.a.)", value=3.00, min_value=0.0)
-    
-    return {
-        'location': location,
-        'datacenter_load_mw': datacenter_load,
-        'solar_pv_capacity_mw': solar_pv_capacity,
-        'bess_max_power_mw': bess_max_power,
-        'natural_gas_capacity_mw': natural_gas_capacity,
-        'generator_type': generator_type,
-        'generator_om_fixed_dollar_per_kw': generator_om_fixed,
-        'generator_om_variable_dollar_per_kwh': generator_om_variable,
-        'fuel_price_dollar_per_mmbtu': fuel_price,
-        'fuel_escalator_pct': fuel_escalator,
-        'solar_om_fixed_dollar_per_kw': solar_om_fixed,
-        'bess_om_fixed_dollar_per_kw': bess_om_fixed,
-        'bos_om_fixed_dollar_per_kw_load': bos_om_fixed,
-        'soft_om_pct': soft_om_pct,
-        'om_escalator_pct': om_escalator,
-        'lcoe_dollar_per_mwh': lcoe,
-        'cost_of_debt_pct': cost_of_debt,
-        'leverage_pct': leverage,
-        'debt_term_years': debt_term,
-        'cost_of_equity_pct': cost_of_equity,
-        'investment_tax_credit_pct': investment_tax_credit,
-        'combined_tax_rate_pct': combined_tax_rate,
-        'construction_time_years': construction_time,
-        # Solar PV CAPEX
-        'modules': modules,
-        'inverters': inverters,
-        'racking': racking,
-        'balance_system': balance_system,
-        'labor': labor,
-        # BESS CAPEX
-        'bess_units': bess_units,
-        'bess_bos': bess_bos,
-        'bess_labor': bess_labor,
-        # Generator CAPEX
-        'gensets': gensets,
-        'gen_bos': gen_bos,
-        'gen_labor': gen_labor,
-        # System Integration CAPEX
-        'microgrid': microgrid,
-        'controls': controls,
-        'si_labor': si_labor,
-        # Soft Costs
-        'general_conditions': general_conditions,
-        'epc_overhead': epc_overhead,
-        'design_engineering': design_engineering,
-        'permitting': permitting,
-        'startup': startup,
-        'insurance': insurance,
-        'taxes': taxes
-    }
-
-def calculate_capex(
-    solar_pv_capacity_mw: float,
-    bess_max_power_mw: float,
-    natural_gas_capacity_mw: float,
-    datacenter_load_mw: float,
-    # Solar PV unit costs
-    modules: float = 0.220,
-    inverters: float = 0.050,
-    racking: float = 0.180,
-    balance_system: float = 0.120,
-    labor: float = 0.200,
-    # BESS unit costs
-    bess_units: float = 200.0,
-    bess_bos: float = 40.0,
-    bess_labor: float = 20.0,
-    # Generator unit costs
-    gensets: float = 800.0,
-    gen_bos: float = 200.0,
-    gen_labor: float = 150.0,
-    # System Integration unit costs
-    microgrid: float = 300.0,
-    controls: float = 50.0,
-    si_labor: float = 60.0,
-    # Soft Costs percentages
-    general_conditions: float = 0.50,
-    epc_overhead: float = 5.00,
-    design_engineering: float = 0.50,
-    permitting: float = 0.05,
-    startup: float = 0.25,
-    insurance: float = 0.50,
-    taxes: float = 5.00
-) -> Dict[str, float]:
-    """Calculate CAPEX for each system component."""
-    
-    # Calculate Solar CAPEX
-    solar_capex = solar_pv_capacity_mw * 1_000_000 * (
-        modules + inverters + racking + balance_system + labor
-    )
-    
-    # Calculate BESS CAPEX
-    bess_capex = bess_max_power_mw * 1000 * (
-        bess_units + bess_bos + bess_labor
-    )
-    
-    # Calculate Generator CAPEX
-    generator_capex = natural_gas_capacity_mw * 1000 * (
-        gensets + gen_bos + gen_labor
-    )
-    
-    # Calculate System Integration CAPEX
-    system_integration_capex = datacenter_load_mw * 1000 * (
-        microgrid + controls + si_labor
-    )
-    
-    # Calculate total hard costs
-    total_hard_costs = (
-        solar_capex +
-        bess_capex +
-        generator_capex +
-        system_integration_capex
-    )
-    
-    # Calculate soft costs
-    soft_costs = total_hard_costs * (
-        general_conditions/100 +
-        epc_overhead/100 +
-        design_engineering/100 +
-        permitting/100 +
-        startup/100 +
-        insurance/100 +
-        taxes/100
-    )
-    
-    return {
-        'solar': solar_capex / 1_000_000,  # Convert to millions
-        'bess': bess_capex / 1_000_000,
-        'generator': generator_capex / 1_000_000,
-        'system_integration': system_integration_capex / 1_000_000,
-        'soft_costs': soft_costs / 1_000_000
-    }
 
 def filter_simulation_data(df: pd.DataFrame, location: str, system_spec: str) -> pd.DataFrame:
     """Filter simulation data based on location and system spec."""
@@ -315,108 +51,107 @@ def calculate_energy_mix(filtered_data: pd.DataFrame) -> Dict[str, float]:
 
 def main():
     """Main application function."""
-    st.set_page_config(page_title="Solar Datacenter LCOE Calculator", layout="wide")
+    st.set_page_config(layout="wide", page_title="LCOE Calculator")
     
-    # Initialize data
-    global simulation_data, unique_values
-    simulation_data, unique_values = init_data()
+    # Load simulation data
+    df, unique_values = init_data()
     
-    # Create input sections and get inputs
-    inputs = create_input_sections()
+    # Create input sections
+    inputs = create_input_sections(unique_values)
     
-    # Calculate CAPEX based on inputs
+    # Calculate CAPEX
     capex = calculate_capex(
         solar_pv_capacity_mw=inputs['solar_pv_capacity_mw'],
         bess_max_power_mw=inputs['bess_max_power_mw'],
         natural_gas_capacity_mw=inputs['natural_gas_capacity_mw'],
         datacenter_load_mw=inputs['datacenter_load_mw'],
-        # Solar PV unit costs
-        modules=inputs['modules'],
-        inverters=inputs['inverters'],
-        racking=inputs['racking'],
-        balance_system=inputs['balance_system'],
-        labor=inputs['labor'],
-        # BESS unit costs
+        pv_modules=inputs['pv_modules'],
+        pv_inverters=inputs['pv_inverters'],
+        pv_racking=inputs['pv_racking'],
+        pv_balance_system=inputs['pv_balance_system'],
+        pv_labor=inputs['pv_labor'],
         bess_units=inputs['bess_units'],
-        bess_bos=inputs['bess_bos'],
+        bess_balance_of_system=inputs['bess_balance_of_system'],
         bess_labor=inputs['bess_labor'],
-        # Generator unit costs
-        gensets=inputs['gensets'],
-        gen_bos=inputs['gen_bos'],
+        gen_gensets=inputs['gensets'],
+        gen_balance_of_system=inputs['gen_balance_of_system'],
         gen_labor=inputs['gen_labor'],
-        # System Integration unit costs
-        microgrid=inputs['microgrid'],
-        controls=inputs['controls'],
+        si_microgrid=inputs['si_microgrid'],
+        si_controls=inputs['si_controls'],
         si_labor=inputs['si_labor'],
-        # Soft Costs percentages
-        general_conditions=inputs['general_conditions'],
-        epc_overhead=inputs['epc_overhead'],
-        design_engineering=inputs['design_engineering'],
-        permitting=inputs['permitting'],
-        startup=inputs['startup'],
-        insurance=inputs['insurance'],
-        taxes=inputs['taxes']
+        soft_costs_general_conditions=inputs['soft_costs_general_conditions'],
+        soft_costs_epc_overhead=inputs['soft_costs_epc_overhead'],
+        soft_costs_design_engineering=inputs['soft_costs_design_engineering'],
+        soft_costs_permitting=inputs['soft_costs_permitting'],
+        soft_costs_startup=inputs['soft_costs_startup'],
+        soft_costs_insurance=inputs['soft_costs_insurance'],
+        soft_costs_taxes=inputs['soft_costs_taxes']
     )
-
-    # Calculate total CAPEX
-    total_capex = sum(capex.values())
-    
-    # CAPEX Section
-    st.header("CAPEX")
-    st.metric("Total CAPEX", f"${total_capex:,.1f}M")
-    st.plotly_chart(create_capex_chart(capex, total_capex), use_container_width=True)
     
     # Filter simulation data
     system_spec = f"{inputs['solar_pv_capacity_mw']}MW | {inputs['bess_max_power_mw']}MW | {inputs['natural_gas_capacity_mw']}MW"
-    filtered_data = filter_simulation_data(simulation_data, inputs['location'], system_spec)
+    filtered_data = filter_simulation_data(df, inputs['location'], system_spec)
     
     if filtered_data.empty:
         st.error("No matching simulation data found for the selected inputs. Please adjust your parameters.")
         st.stop()
     
-    # Renewable Energy Section
-    st.header("Renewable Energy")
+    # Calculate energy mix
     energy_mix = calculate_energy_mix(filtered_data)
-    st.metric("Renewable Energy Percentage", f"{energy_mix['renewable_percentage']:.1f}%")
-    st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
-
-    # Generate Proforma button
-    if st.button("Generate Proforma"):
-        # Remove CAPEX-related inputs that aren't needed in calculate_pro_forma
-        proforma_inputs = {k: v for k, v in inputs.items() if k not in [
-            'modules', 'inverters', 'racking', 'balance_system', 'labor',
-            'bess_units', 'bess_bos', 'bess_labor',
-            'gensets', 'gen_bos', 'gen_labor',
-            'microgrid', 'controls', 'si_labor',
-            'general_conditions', 'epc_overhead', 'design_engineering',
-            'permitting', 'startup', 'insurance', 'taxes'
-        ]}
-        
-        proforma = calculate_pro_forma(
-            simulation_data=filtered_data,  # Pass filtered data instead of full dataset
-            **proforma_inputs,  # Pass filtered inputs
+    
+    # Display CAPEX section with metric and chart side by side
+    st.subheader("CAPEX Breakdown")
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        total_capex = sum(capex.values())
+        st.metric("Total CAPEX", f"${total_capex:,.1f}M")
+    with col2:
+        st.plotly_chart(create_capex_chart(capex, total_capex), use_container_width=True)
+    
+    # Display Energy Mix section with metric and chart side by side
+    st.subheader("Energy Mix")
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        st.metric("Renewable %", f"{energy_mix['renewable_percentage']:.1f}%")
+    with col2:
+        st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
+    
+    # Generate Pro Forma button and display
+    if st.button('Generate Pro Forma'):
+        pro_forma = calculate_pro_forma(
+            simulation_data=filtered_data,
+            location=inputs['location'],
+            datacenter_load_mw=inputs['datacenter_load_mw'],
+            solar_pv_capacity_mw=inputs['solar_pv_capacity_mw'],
+            bess_max_power_mw=inputs['bess_max_power_mw'],
+            natural_gas_capacity_mw=inputs['natural_gas_capacity_mw'],
+            generator_type=inputs['generator_type'],
             solar_capex=capex['solar'],
             bess_capex=capex['bess'],
             generator_capex=capex['generator'],
             system_integration_capex=capex['system_integration'],
-            soft_costs_capex=capex['soft_costs']
+            soft_costs_capex=capex['soft_costs'],
+            solar_om_fixed_dollar_per_kw=inputs['solar_om_fixed_dollar_per_kw'],
+            bess_om_fixed_dollar_per_kw=inputs['bess_om_fixed_dollar_per_kw'],
+            generator_om_fixed_dollar_per_kw=inputs['generator_om_fixed_dollar_per_kw'],
+            generator_om_variable_dollar_per_kwh=inputs['generator_om_variable_dollar_per_kwh'],
+            fuel_price_dollar_per_mmbtu=inputs['fuel_price_dollar_per_mmbtu'],
+            fuel_escalator_pct=inputs['fuel_escalator_pct'],
+            bos_om_fixed_dollar_per_kw_load=inputs['bos_om_fixed_dollar_per_kw_load'],
+            soft_om_pct=inputs['soft_om_pct'],
+            om_escalator_pct=inputs['om_escalator_pct'],
+            debt_term_years=inputs['debt_term_years'],
+            leverage_pct=inputs['leverage_pct'],
+            cost_of_debt_pct=inputs['cost_of_debt_pct'],
+            combined_tax_rate_pct=inputs['combined_tax_rate_pct'],
+            lcoe_dollar_per_mwh=inputs['lcoe_dollar_per_mwh']
         )
         
-        st.subheader("Proforma Results")
-        
-        # Display the formatted proforma
-        display_proforma(proforma)
-        
-        # Add download button for CSV
-        formatted_proforma = format_proforma(proforma)
-        csv = formatted_proforma.to_csv().encode('utf-8')
-        st.download_button(
-            "Download Proforma as CSV",
-            csv,
-            "proforma.csv",
-            "text/csv",
-            key='download-csv'
-        )
+        if pro_forma is not None:
+            formatted_proforma = format_proforma(pro_forma)
+            display_proforma(formatted_proforma)
+        else:
+            st.error("Failed to generate pro forma. Please check your inputs.")
 
 if __name__ == "__main__":
     main()

@@ -3,6 +3,91 @@
 import pandas as pd
 from typing import Dict, Optional, Union, Tuple
 
+_BESS_HRS_STORAGE = 4
+
+
+def calculate_capex(
+    solar_pv_capacity_mw: float,
+    bess_max_power_mw: float,
+    natural_gas_capacity_mw: float,
+    datacenter_load_mw: float,
+    # Solar PV costs ($/W)
+    pv_modules: float = 0.220,
+    pv_inverters: float = 0.050,
+    pv_racking: float = 0.180,
+    pv_balance_system: float = 0.120,
+    pv_labor: float = 0.200,
+    # BESS costs ($/kWh)
+    bess_units: float = 200.0,
+    bess_balance_of_system: float = 40.0,
+    bess_labor: float = 20.0,
+    # Generator costs ($/kW )
+    gen_gensets: float = 800.0,
+    gen_balance_of_system: float = 200.0,
+    gen_labor: float = 150.0,
+    # System Integration costs ($/kW)
+    si_microgrid: float = 300.0,
+    si_controls: float = 50.0,
+    si_labor: float = 60.0,
+    # Soft Costs (percentages)
+    soft_costs_general_conditions: float = 0.50,
+    soft_costs_epc_overhead: float = 5.00,
+    soft_costs_design_engineering: float = 0.50,
+    soft_costs_permitting: float = 0.05,
+    soft_costs_startup: float = 0.25,
+    soft_costs_insurance: float = 0.50,
+    soft_costs_taxes: float = 5.00
+) -> Dict[str, float]:
+    """Calculate CAPEX for each system component."""
+    
+    # Calculate Solar CAPEX
+    solar_capex = solar_pv_capacity_mw * 1_000_000 * (
+        pv_modules + pv_inverters + pv_racking + pv_balance_system + pv_labor
+    )
+    
+    # Calculate BESS CAPEX
+    bess_system_mwh = bess_max_power_mw * _BESS_HRS_STORAGE
+    bess_capex = bess_system_mwh * 1000 * (
+        bess_units + bess_balance_of_system + bess_labor
+    )
+    
+    # Calculate Generator CAPEX
+    generator_capex = natural_gas_capacity_mw * 1000 * (
+        gen_gensets + gen_balance_of_system + gen_labor
+    )
+    
+    # Calculate System Integration CAPEX
+    system_integration_capex = datacenter_load_mw * 1000 * (
+        si_microgrid + si_controls + si_labor
+    )
+    
+    # Calculate total hard costs
+    total_hard_costs = (
+        solar_capex +
+        bess_capex +
+        generator_capex +
+        system_integration_capex
+    )
+    
+    # Calculate soft costs
+    soft_costs = total_hard_costs * (
+        soft_costs_general_conditions/100 +
+        soft_costs_epc_overhead/100 +
+        soft_costs_design_engineering/100 +
+        soft_costs_permitting/100 +
+        soft_costs_startup/100 +
+        soft_costs_insurance/100 +
+        soft_costs_taxes/100
+    )
+    
+    return {
+        'solar': solar_capex / 1_000_000,  # Convert to millions
+        'bess': bess_capex / 1_000_000,
+        'generator': generator_capex / 1_000_000,
+        'system_integration': system_integration_capex / 1_000_000,
+        'soft_costs': soft_costs / 1_000_000
+    }
+
 def calculate_pro_forma(
     simulation_data: pd.DataFrame,
     location: str,
@@ -40,7 +125,7 @@ def calculate_pro_forma(
     Calculate the proforma financial model for a solar datacenter project.
     
     Args:
-        simulation_data (pd.DataFrame): Powerflow simulation runs in the format of `powerflow_output_frozen.csv`
+        simulation_data (pd.DataFrame): Pre-filtered powerflow simulation data
         location (str): Project location
         solar_pv_capacity_MW (Union[int, float]): Solar PV capacity in MW-DC
         bess_max_power_MW (Union[int, float]): Battery storage power capacity in MW
@@ -68,16 +153,7 @@ def calculate_pro_forma(
         Optional[pd.DataFrame]: Proforma financial model with years as index and metrics as columns.
                               Returns None if no matching simulation data is found.
     """
-    # Create System Spec string for filtering
-    system_spec = f"{solar_pv_capacity_mw}MW | {bess_max_power_mw}MW | {natural_gas_capacity_mw}MW"
-    
-    # Filter simulation data based on inputs
-    filtered_data = simulation_data[
-        (simulation_data['Location'].str.strip() == location) &
-        (simulation_data['System Spec'] == system_spec)
-    ]
-    
-    if filtered_data.empty:
+    if simulation_data.empty:
         return None
     
     # Create years index (-1 to 20)
@@ -86,18 +162,44 @@ def calculate_pro_forma(
     proforma.index.name = 'Year'
     
     # Fill in operating metrics from simulation data
-    operating_years = filtered_data['Operating Year'].unique()
-    for year in range(21):  # Extended to 20 years
-        if year in operating_years:
-            year_data = filtered_data[filtered_data['Operating Year'] == year].iloc[0]
-            proforma.loc[year, 'Operating Year'] = year
-            proforma.loc[year, 'Solar Output - Raw (MWh)'] = year_data['Solar Output - Raw (MWh)']
-            proforma.loc[year, 'Solar Output - Net (MWh)'] = year_data['Solar Output - Net (MWh)']
-            proforma.loc[year, 'BESS Throughput (MWh)'] = year_data['BESS Throughput (MWh)']
-            proforma.loc[year, 'BESS Net Output (MWh)'] = year_data['BESS Net Output (MWh)']
-            proforma.loc[year, 'Generator Output (MWh)'] = year_data['Generator Output (MWh)']
-            proforma.loc[year, 'Generator Fuel Input (MMBtu)'] = year_data['Generator Fuel Input (MMBtu)']
-            proforma.loc[year, 'Load Served (MWh)'] = year_data['Load Served (MWh)']
+    operating_years = simulation_data['Operating Year'].unique()
+    for year in operating_years:
+        year_data = simulation_data[simulation_data['Operating Year'] == year].iloc[0]
+        proforma.loc[year, 'Operating Year'] = year
+        proforma.loc[year, 'Solar Output - Raw (MWh)'] = year_data['Solar Output - Raw (MWh)']
+        proforma.loc[year, 'Solar Output - Net (MWh)'] = year_data['Solar Output - Net (MWh)']
+        proforma.loc[year, 'BESS Throughput (MWh)'] = year_data['BESS Throughput (MWh)']
+        proforma.loc[year, 'BESS Net Output (MWh)'] = year_data['BESS Net Output (MWh)']
+        proforma.loc[year, 'Generator Output (MWh)'] = year_data['Generator Output (MWh)']
+        proforma.loc[year, 'Generator Fuel Input (MMBtu)'] = year_data['Generator Fuel Input (MMBtu)']
+        proforma.loc[year, 'Load Served (MWh)'] = year_data['Load Served (MWh)']
+    
+    # Calculate debt service
+    total_capex = solar_capex + bess_capex + generator_capex + system_integration_capex + soft_costs_capex
+    total_debt = total_capex * (leverage_pct / 100)
+    interest_rate = cost_of_debt_pct / 100
+    
+    # Calculate fixed debt service payment
+    # PMT = PV * r * (1 + r)^n / ((1 + r)^n - 1)
+    fixed_payment = total_debt * interest_rate * (1 + interest_rate)**debt_term_years / ((1 + interest_rate)**debt_term_years - 1)
+    
+    # Initialize debt values for year 1
+    proforma.loc[1, 'Debt Outstanding, Yr Start'] = total_debt
+    
+    # Calculate debt service for each year
+    for year in range(1, debt_term_years + 1):
+        # Interest expense is rate * start of period balance
+        proforma.loc[year, 'Interest Expense'] = -1.0 * proforma.loc[year, 'Debt Outstanding, Yr Start'] * interest_rate
+        
+        # Total debt service is the fixed payment
+        proforma.loc[year, 'Debt Service'] = -1.0 * fixed_payment
+        
+        # Principal is the difference between total payment and interest
+        proforma.loc[year, 'Principal Payment'] = proforma.loc[year, 'Debt Service'] - proforma.loc[year, 'Interest Expense']
+        
+        if year < debt_term_years:
+            # Update debt for next year
+            proforma.loc[year+1, 'Debt Outstanding, Yr Start'] = proforma.loc[year, 'Debt Outstanding, Yr Start'] + proforma.loc[year, 'Principal Payment']
     
     # Fill in operating rates (these don't change with year except for escalation)
     for year in years:
@@ -114,21 +216,20 @@ def calculate_pro_forma(
             proforma.loc[year, 'BOS Fixed O&M Rate'] = -1.0 * bos_om_fixed_dollar_per_kw_load * om_escalation
             proforma.loc[year, 'Soft O&M Rate'] = -1.0 * (soft_om_pct) * om_escalation
             
-            # Calculate total CAPEX for Fixed O&M calculation
-            total_capex = solar_capex + bess_capex + generator_capex + system_integration_capex + soft_costs_capex
-            
+            # Calculate hard CAPEX (total excl. soft costs) for Fixed O&M calculation
+            total_hard_capex = solar_capex + bess_capex + generator_capex + system_integration_capex
+
+            hard_capex_om_totals = (
+                proforma.loc[year, 'Solar Fixed O&M Rate'] * solar_pv_capacity_mw * 1000 +
+                proforma.loc[year, 'Battery Fixed O&M Rate'] * bess_max_power_mw * 1000 +
+                proforma.loc[year, 'Generator Fixed O&M Rate'] * natural_gas_capacity_mw * 1000 +
+                proforma.loc[year, 'BOS Fixed O&M Rate'] * datacenter_load_mw * 1000
+            ) / 1_000_000
+
             # Calculate Fixed O&M Cost
             # Fixed O&M Cost = (Solar O&M + BESS O&M + Generator O&M + BOS O&M) + Soft O&M pct * Total CAPEX
-            # proforma.loc[year, 'Fixed O&M Cost'] = (
-            #     proforma.loc[year, 'Solar Fixed O&M Rate'] * solar_pv_capacity_mw * 1000 +
-            #     proforma.loc[year, 'Battery Fixed O&M Rate'] * bess_max_power_mw * 1000 +
-            #     proforma.loc[year, 'Generator Fixed O&M Rate'] * natural_gas_capacity_mw * 1000 +
-            #     proforma.loc[year, 'BOS Fixed O&M Rate'] * datacenter_load_mw * 1000 +
-            #     (proforma.loc[year, 'Soft O&M Rate'] / 100) * total_capex
-            # ) / 1_000_000
-            proforma.loc[year, 'Fixed O&M Cost'] = total_capex
-
-            
+            proforma.loc[year, 'Fixed O&M Cost'] = hard_capex_om_totals + (proforma.loc[year, 'Soft O&M Rate'] / 100) * total_hard_capex
+      
             # Calculate Fuel Cost
             proforma.loc[year, 'Fuel Cost'] = (proforma.loc[year, 'Fuel Unit Cost'] * 
                                              proforma.loc[year, 'Generator Fuel Input (MMBtu)']) / 1_000_000

@@ -9,7 +9,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
         go.Bar(
             name='Solar',
             x=[capex['solar']],
-            y=['System CAPEX'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#ffd700',  # yellow
             text=f"${capex['solar']:,.1f}M",
@@ -20,7 +20,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
         go.Bar(
             name='BESS',
             x=[capex['bess']],
-            y=['System CAPEX'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#ff7f0e',  # orange
             text=f"${capex['bess']:,.1f}M",
@@ -31,7 +31,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
         go.Bar(
             name='Generator',
             x=[capex['generator']],
-            y=['System CAPEX'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#808080',  # gray
             text=f"${capex['generator']:,.1f}M",
@@ -42,7 +42,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
         go.Bar(
             name='System Integration',
             x=[capex['system_integration']],
-            y=['System CAPEX'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#1f77b4',  # blue
             text=f"${capex['system_integration']:,.1f}M",
@@ -53,7 +53,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
         go.Bar(
             name='Soft Costs',
             x=[capex['soft_costs']],
-            y=['System CAPEX'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#2ca02c',  # green
             text=f"${capex['soft_costs']:,.1f}M",
@@ -64,20 +64,24 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
     ])
 
     fig.update_layout(
-        title='Breakdown',
+        title=dict(
+            text='Breakdown',
+            y=0.95  # Move title down slightly
+        ),
         xaxis_title='CAPEX Cost ($ Millions)',
         barmode='stack',
-        height=200,
+        height=150,
         showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=1.15,  # Move legend up
             xanchor="center",
             x=0.5,
             traceorder="normal"
         ),
-        margin=dict(t=100, b=0, l=0, r=0)
+        margin=dict(t=50, b=30, l=0, r=0),  # Adjusted top and bottom margins
+        yaxis=dict(showticklabels=False)  # Hide y-axis labels
     )
     
     return fig
@@ -90,7 +94,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         go.Bar(
             name='Solar',
             x=[energy_mix['solar_twh']],
-            y=['Energy Mix'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#ffd700',  # yellow
             text=f"{energy_mix['solar_twh']:,.1f} TWh",
@@ -101,7 +105,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         go.Bar(
             name='BESS',
             x=[energy_mix['bess_twh']],
-            y=['Energy Mix'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#ff7f0e',  # orange
             text=f"{energy_mix['bess_twh']:,.1f} TWh",
@@ -112,7 +116,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         go.Bar(
             name='Generator',
             x=[energy_mix['generator_twh']],
-            y=['Energy Mix'],
+            y=[''],  # Empty label
             orientation='h',
             marker_color='#808080',  # gray
             text=f"{energy_mix['generator_twh']:,.1f} TWh",
@@ -126,7 +130,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         title='Lifetime Energy Mix',
         xaxis_title='Energy (TWh)',
         barmode='stack',
-        height=200,
+        height=150,
         showlegend=True,
         legend=dict(
             orientation="h",
@@ -136,7 +140,8 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
             x=0.5,
             traceorder="normal"
         ),
-        margin=dict(t=100, b=0, l=0, r=0)
+        margin=dict(t=50, b=30, l=0, r=0),  # Adjusted top and bottom margins
+        yaxis=dict(showticklabels=False)  # Hide y-axis labels
     )
     
     return fig
