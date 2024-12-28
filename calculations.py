@@ -180,6 +180,14 @@ def calculate_pro_forma(
     total_capex = solar_capex + bess_capex + generator_capex + system_integration_capex + soft_costs_capex
     total_debt = total_capex * (leverage_pct / 100)
     interest_rate = cost_of_debt_pct / 100
+
+    # Calculate Capital section
+    # Spread CAPEX evenly over construction period
+    capex_per_year = total_capex / construction_time_years
+    for year in range(-construction_time_years + 1, 1):  # e.g., for 2 years: -1, 0
+        proforma.loc[year, 'Capital Expenditure'] = -1.0 * capex_per_year
+        proforma.loc[year, 'Debt Contribution'] = capex_per_year * (leverage_pct / 100)  # Debt portion
+        proforma.loc[year, 'Equity Capex'] = -1.0 * capex_per_year * (1 - leverage_pct / 100)  # Equity portion
     
     # Calculate fixed debt service payment
     # PMT = PV * r * (1 + r)^n / ((1 + r)^n - 1)
@@ -292,6 +300,23 @@ def calculate_pro_forma(
             tax_on_income = proforma.loc[year, 'Taxable Income'] * tax_rate
             itc_benefit = proforma.loc[year, 'Federal ITC'] if year == 1 else 0
             proforma.loc[year, 'Tax Benefit (Liability)'] = -1.0 * tax_on_income + itc_benefit
+
+    # Calculate After-Tax Net Equity Cash Flow
+    for year in years:
+        if year in proforma.index:
+            # Get the components, defaulting to 0 if not present
+            ebitda = proforma.loc[year, 'EBITDA'] if 'EBITDA' in proforma.columns and not pd.isna(proforma.loc[year, 'EBITDA']) else 0
+            debt_service = proforma.loc[year, 'Debt Service'] if 'Debt Service' in proforma.columns and not pd.isna(proforma.loc[year, 'Debt Service']) else 0
+            tax_benefit = proforma.loc[year, 'Tax Benefit (Liability)'] if 'Tax Benefit (Liability)' in proforma.columns and not pd.isna(proforma.loc[year, 'Tax Benefit (Liability)']) else 0
+            equity_capex = proforma.loc[year, 'Equity Capex'] if 'Equity Capex' in proforma.columns and not pd.isna(proforma.loc[year, 'Equity Capex']) else 0
+            
+            # Sum all components
+            proforma.loc[year, 'After-Tax Net Equity Cash Flow'] = (
+                ebitda +  # Operating cash flow
+                debt_service +  # Debt service is already negative
+                tax_benefit +  # Tax benefit/liability
+                equity_capex  # Equity capex is already negative
+            )
 
     # Format numbers
     proforma = proforma.round(2)
