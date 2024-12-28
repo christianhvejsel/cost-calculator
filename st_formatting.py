@@ -44,37 +44,6 @@ METRIC_UNITS = {
     'After-Tax Net Equity Cash Flow': '$, Millions'
 }
 
-def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float, 
-                         bess_max_power: float, natural_gas_capacity: float) -> go.Figure:
-    """
-    Create a bar chart showing system capacity overview.
-    
-    Args:
-        datacenter_demand (float): Data center demand in MW
-        solar_pv_capacity (float): Solar PV capacity in MW-DC
-        bess_max_power (float): Battery storage power capacity in MW
-        natural_gas_capacity (float): Natural gas generator capacity in MW
-    
-    Returns:
-        go.Figure: Plotly figure object with the capacity chart
-    """
-    colors = ['#1f77b4', '#ffd700', '#ff7f0e', '#808080']  # Blue, Yellow, Orange, Grey
-    fig = go.Figure(data=[
-        go.Bar(name='Capacity (MW)', 
-               x=['Data Center', 'Solar PV', 'BESS', 'Natural Gas'],
-               y=[datacenter_demand, solar_pv_capacity, bess_max_power, natural_gas_capacity],
-               text=[f'{int(val)} MW' for val in [datacenter_demand, solar_pv_capacity, bess_max_power, natural_gas_capacity]],
-               textposition='auto',
-               marker_color=colors)
-    ])
-    fig.update_layout(
-        title='System Capacity Overview',
-        height=300,
-        showlegend=False,
-        margin=dict(t=30, b=0, l=0, r=0)
-    )
-    return fig
-
 def calculate_npv(values: pd.Series, discount_rate: float) -> float:
     """Calculate NPV of a series of cash flows."""
     years = values.index.astype(float)
@@ -253,7 +222,13 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
     def highlight_groups(x):
         return ['background-color: #f0f2f6' if x['Group'] != '' else '' for _ in x]
     
-    styled_df = styled_df.apply(highlight_groups, axis=1)
+    # Add Totals/NPV column highlighting
+    def highlight_totals_column(x):
+        return ['background-color: #e6f3ff' if col == 'Totals/NPV' else '' for col in x.index]
+    
+    styled_df = (styled_df
+                .apply(highlight_groups, axis=1)
+                .apply(highlight_totals_column, axis=1))
     
     # Display with frozen columns
     st.dataframe(

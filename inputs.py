@@ -21,22 +21,25 @@ def create_input_sections(unique_values) -> Dict:
     with col2:
         solar_pv_capacity = st.selectbox(
             "Solar PV Capacity (MW-DC)",
-            options=unique_values['solar_capacities']
+            options=unique_values['solar_capacities'],
+            index=2
         )
     with col3:
         bess_max_power = st.selectbox(
             "BESS Max Power (MW), 4h store",
-            options=unique_values['bess_capacities']
+            options=unique_values['bess_capacities'],
+            index=2
         )
     with col4:
-        natural_gas_capacity = st.selectbox(
-            "Natural Gas Capacity (MW)",
-            options=unique_values['generator_capacities']
+        generator_capacity = st.selectbox(
+            "Generator Capacity (MW)",
+            options=unique_values['generator_capacities'],
+            index=2
         )
     
     # Display capacity chart
     st.plotly_chart(
-        create_capacity_chart(datacenter_load, solar_pv_capacity, bess_max_power, natural_gas_capacity),
+        create_capacity_chart(datacenter_load, solar_pv_capacity, bess_max_power, generator_capacity),
         use_container_width=True
     )
     
@@ -197,7 +200,7 @@ def create_input_sections(unique_values) -> Dict:
         'datacenter_load_mw': datacenter_load,
         'solar_pv_capacity_mw': solar_pv_capacity,
         'bess_max_power_mw': bess_max_power,
-        'natural_gas_capacity_mw': natural_gas_capacity,
+        'generator_capacity_mw': generator_capacity,
         'generator_type': generator_type,
         'generator_om_fixed_dollar_per_kw': generator_om_fixed,
         'generator_om_variable_dollar_per_kwh': generator_om_variable,

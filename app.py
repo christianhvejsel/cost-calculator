@@ -41,6 +41,8 @@ def calculate_energy_mix(filtered_data: pd.DataFrame) -> Dict[str, float]:
         'solar_twh': solar_twh,
         'bess_twh': bess_twh,
         'generator_twh': generator_twh,
+        'total_generation_twh': solar_twh + bess_twh + generator_twh,
+        'total_load_twh': total_load_twh,
         'renewable_percentage': renewable_percentage
     }
 
@@ -58,7 +60,7 @@ def main():
     capex = calculate_capex(inputs)
     
     # Filter simulation data
-    system_spec = f"{inputs['solar_pv_capacity_mw']}MW | {inputs['bess_max_power_mw']}MW | {inputs['natural_gas_capacity_mw']}MW"
+    system_spec = f"{inputs['solar_pv_capacity_mw']}MW | {inputs['bess_max_power_mw']}MW | {inputs['generator_capacity_mw']}MW"
     filtered_data = filter_simulation_data(df, inputs['location'], system_spec)
     
     if filtered_data.empty:
@@ -85,6 +87,7 @@ def main():
     with col2:
         st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
     
+    st.subheader("Proforma")
     # Generate Pro Forma button and display
     if st.button('Generate Proforma'):
         pro_forma = calculate_pro_forma(
@@ -92,7 +95,7 @@ def main():
             datacenter_load_mw=inputs['datacenter_load_mw'],
             solar_pv_capacity_mw=inputs['solar_pv_capacity_mw'],
             bess_max_power_mw=inputs['bess_max_power_mw'],
-            natural_gas_capacity_mw=inputs['natural_gas_capacity_mw'],
+            generator_capacity_mw=inputs['generator_capacity_mw'],
             solar_capex=capex['solar'],
             bess_capex=capex['bess'],
             generator_capex=capex['generator'],

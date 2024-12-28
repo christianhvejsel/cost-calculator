@@ -3,6 +3,14 @@
 import plotly.graph_objects as go
 from typing import Dict
 
+# Global color constants
+SOLAR_COLOR = '#ffd700'  # yellow
+BESS_COLOR = '#ff7f0e'   # orange
+GENERATOR_COLOR = '#808080'  # gray
+SYSTEM_INTEGRATION_COLOR = '#1f77b4'  # blue
+SOFT_COSTS_COLOR = '#2ca02c'  # green
+DATACENTER_COLOR = '#1f77b4'  # blue
+
 def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure:
     """Create a stacked horizontal bar chart showing CAPEX breakdown."""
     fig = go.Figure(data=[
@@ -11,7 +19,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
             x=[capex['solar']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#ffd700',  # yellow
+            marker_color=SOLAR_COLOR,
             text=f"${capex['solar']:,.1f}M",
             textposition='inside',
             hovertemplate="Solar CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
@@ -22,7 +30,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
             x=[capex['bess']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#ff7f0e',  # orange
+            marker_color=BESS_COLOR,
             text=f"${capex['bess']:,.1f}M",
             textposition='inside',
             hovertemplate="BESS CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
@@ -33,7 +41,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
             x=[capex['generator']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#808080',  # gray
+            marker_color=GENERATOR_COLOR,
             text=f"${capex['generator']:,.1f}M",
             textposition='inside',
             hovertemplate="Generator CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
@@ -44,7 +52,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
             x=[capex['system_integration']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#1f77b4',  # blue
+            marker_color=SYSTEM_INTEGRATION_COLOR,
             text=f"${capex['system_integration']:,.1f}M",
             textposition='inside',
             hovertemplate="System Integration CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
@@ -55,7 +63,7 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
             x=[capex['soft_costs']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#2ca02c',  # green
+            marker_color=SOFT_COSTS_COLOR,
             text=f"${capex['soft_costs']:,.1f}M",
             textposition='inside',
             hovertemplate="Soft Costs CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
@@ -96,7 +104,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
             x=[energy_mix['solar_twh']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#ffd700',  # yellow
+            marker_color=SOLAR_COLOR,
             text=f"{energy_mix['solar_twh']:,.1f} TWh",
             textposition='inside',
             hovertemplate="Solar: %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
@@ -107,7 +115,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
             x=[energy_mix['bess_twh']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#ff7f0e',  # orange
+            marker_color=BESS_COLOR,
             text=f"{energy_mix['bess_twh']:,.1f} TWh",
             textposition='inside',
             hovertemplate="BESS: %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
@@ -118,7 +126,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
             x=[energy_mix['generator_twh']],
             y=[''],  # Empty label
             orientation='h',
-            marker_color='#808080',  # gray
+            marker_color=GENERATOR_COLOR,
             text=f"{energy_mix['generator_twh']:,.1f} TWh",
             textposition='inside',
             hovertemplate="Generator: %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
@@ -147,16 +155,15 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
     return fig
 
 def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float, 
-                         bess_max_power: float, natural_gas_capacity: float) -> go.Figure:
+                         bess_max_power: float, generator_capacity: float) -> go.Figure:
     """Create a bar chart showing system capacity overview."""
-    colors = ['#1f77b4', '#ffd700', '#ff7f0e', '#808080']  # Blue, Yellow, Orange, Grey
     fig = go.Figure(data=[
         go.Bar(name='Capacity (MW)', 
-               x=['Data Center', 'Solar PV', 'BESS', 'Natural Gas'],
-               y=[datacenter_demand, solar_pv_capacity, bess_max_power, natural_gas_capacity],
-               text=[f'{int(val)} MW' for val in [datacenter_demand, solar_pv_capacity, bess_max_power, natural_gas_capacity]],
+               x=['Data Center', 'Solar PV', 'BESS', 'Generator'],
+               y=[datacenter_demand, solar_pv_capacity, bess_max_power, generator_capacity],
+               text=[f'{int(val)} MW' for val in [datacenter_demand, solar_pv_capacity, bess_max_power, generator_capacity]],
                textposition='auto',
-               marker_color=colors)
+               marker_color=[DATACENTER_COLOR, SOLAR_COLOR, BESS_COLOR, GENERATOR_COLOR])
     ])
     fig.update_layout(
         title='System Capacity Overview',

@@ -56,7 +56,7 @@ def calculate_capex(inputs: Dict) -> Dict[str, float]:
     )
     
     # Calculate Generator CAPEX
-    generator_capex = inputs['natural_gas_capacity_mw'] * 1000 * (
+    generator_capex = inputs['generator_capacity_mw'] * 1000 * (
         inputs['gensets'] + 
         inputs['gen_balance_of_system'] + 
         inputs['gen_labor']
@@ -117,7 +117,7 @@ def calculate_pro_forma(
     datacenter_load_mw: Union[int, float],
     solar_pv_capacity_mw: Union[int, float],
     bess_max_power_mw: Union[int, float],
-    natural_gas_capacity_mw: Union[int, float],
+    generator_capacity_mw: Union[int, float],
     # CAPEX inputs (in $M)
     solar_capex: float,
     bess_capex: float,
@@ -152,7 +152,7 @@ def calculate_pro_forma(
         simulation_data (pd.DataFrame): Pre-filtered powerflow simulation data
         solar_pv_capacity_MW (Union[int, float]): Solar PV capacity in MW-DC
         bess_max_power_MW (Union[int, float]): Battery storage power capacity in MW
-        natural_gas_capacity_MW (Union[int, float]): Natural gas generator capacity in MW
+        generator_capacity_MW (Union[int, float]): Natural gas generator capacity in MW
         generator_om_fixed_dollar_per_kW (float): Fixed O&M cost for generator in $/kW
         generator_om_variable_dollar_per_MWh (float): Variable O&M cost for generator in $/MWh
         fuel_price_dollar_per_MMBtu (float): Fuel price in $/MMBtu
@@ -237,7 +237,7 @@ def calculate_pro_forma(
     proforma.loc[operating_years, 'Fixed O&M Cost'] = (
         (proforma.loc[operating_years, 'Solar Fixed O&M Rate'] * solar_pv_capacity_mw * 1000 +
          proforma.loc[operating_years, 'Battery Fixed O&M Rate'] * bess_max_power_mw * 1000 +
-         proforma.loc[operating_years, 'Generator Fixed O&M Rate'] * natural_gas_capacity_mw * 1000 +
+         proforma.loc[operating_years, 'Generator Fixed O&M Rate'] * generator_capacity_mw * 1000 +
          proforma.loc[operating_years, 'BOS Fixed O&M Rate'] * datacenter_load_mw * 1000) / 1_000_000 +
         proforma.loc[operating_years, 'Soft O&M Rate'] / 100 * total_hard_capex
     )
