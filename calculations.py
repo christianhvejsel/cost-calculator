@@ -113,13 +113,14 @@ def calculate_pro_forma(
     soft_om_pct: float,
     om_escalator_pct: float,
     lcoe_dollar_per_mwh: float,
+    depreciation_schedule: pd.DataFrame,
+    investment_tax_credit_pct: float,
     cost_of_debt_pct: float = 7.5,
     leverage_pct: float = 70.0,
     debt_term_years: int = 20,
     cost_of_equity_pct: float = 11.0,
-    investment_tax_credit_pct: float = 30.0,
     combined_tax_rate_pct: float = 21.0,
-    construction_time_years: int = 2
+    construction_time_years: int = 2,
 ) -> Optional[pd.DataFrame]:
     """
     Calculate the proforma financial model for a solar datacenter project.
@@ -148,6 +149,7 @@ def calculate_pro_forma(
         investment_tax_credit_pct (float, optional): Investment tax credit in %. Defaults to 30.0.
         combined_tax_rate_pct (float, optional): Combined tax rate in %. Defaults to 21.0.
         construction_time_years (int, optional): Construction time in years. Defaults to 2.
+        depreciation_schedule (pd.DataFrame): Depreciation schedule
     
     Returns:
         Optional[pd.DataFrame]: Proforma financial model with years as index and metrics as columns.
@@ -201,7 +203,7 @@ def calculate_pro_forma(
             # Update debt for next year
             proforma.loc[year+1, 'Debt Outstanding, Yr Start'] = proforma.loc[year, 'Debt Outstanding, Yr Start'] + proforma.loc[year, 'Principal Payment']
     
-    # Fill in operating rates (these don't change with year except for escalation)
+    # Fill in operating rates and calculate EBITDA first
     for year in years:
         if year > 0:  # Only calculate for operating years (after year 0)
             om_escalation = (1 + om_escalator_pct/100)**(year-1)  # Start from year 1
@@ -225,18 +227,17 @@ def calculate_pro_forma(
                 proforma.loc[year, 'Generator Fixed O&M Rate'] * natural_gas_capacity_mw * 1000 +
                 proforma.loc[year, 'BOS Fixed O&M Rate'] * datacenter_load_mw * 1000
             ) / 1_000_000
-
-            # Calculate Fixed O&M Cost
-            # Fixed O&M Cost = (Solar O&M + BESS O&M + Generator O&M + BOS O&M) + Soft O&M pct * Total CAPEX
-            proforma.loc[year, 'Fixed O&M Cost'] = hard_capex_om_totals + (proforma.loc[year, 'Soft O&M Rate'] / 100) * total_hard_capex
       
+            # Calculate Fixed O&M Cost
+            proforma.loc[year, 'Fixed O&M Cost'] = hard_capex_om_totals + (proforma.loc[year, 'Soft O&M Rate'] / 100) * total_hard_capex
+            
             # Calculate Fuel Cost
             proforma.loc[year, 'Fuel Cost'] = (proforma.loc[year, 'Fuel Unit Cost'] * 
-                                             proforma.loc[year, 'Generator Fuel Input (MMBtu)']) / 1_000_000
+                                           proforma.loc[year, 'Generator Fuel Input (MMBtu)']) / 1_000_000
             
             # Calculate Variable O&M Cost
             proforma.loc[year, 'Variable O&M Cost'] = (proforma.loc[year, 'Generator Variable O&M Rate'] * 
-                                                     proforma.loc[year, 'Generator Output (MWh)'] * 1000) / 1_000_000  # Convert MWh to kWh
+                                                   proforma.loc[year, 'Generator Output (MWh)'] * 1000) / 1_000_000
             
             # Calculate total operating costs
             proforma.loc[year, 'Total Operating Costs'] = (
@@ -250,12 +251,48 @@ def calculate_pro_forma(
             
             # Calculate Revenue (LCOE * Load Served)
             proforma.loc[year, 'Revenue'] = (lcoe_dollar_per_mwh * 
-                                           proforma.loc[year, 'Load Served (MWh)']) / 1_000_000  # Convert to millions
+                                         proforma.loc[year, 'Load Served (MWh)']) / 1_000_000
             
             # Calculate EBITDA (Revenue - Total Operating Costs)
             proforma.loc[year, 'EBITDA'] = (proforma.loc[year, 'Revenue'] + 
-                                          proforma.loc[year, 'Total Operating Costs'])  # Total Operating Costs is already negative
-    
+                                        proforma.loc[year, 'Total Operating Costs'])  # Total Operating Costs is already negative
+
+    # Now calculate tax items after EBITDA is populated
+    # First, calculate the renewable portion of CAPEX (solar + BESS)
+    renewable_capex = solar_capex + bess_capex
+    total_capex = solar_capex + bess_capex + generator_capex + system_integration_capex + soft_costs_capex
+
+    # Calculate Federal Investment Tax Credit amount
+    # ITC applicability on soft costs is the same as the proportion of hard capex that's renewable.
+    renewable_proportion_of_hard_capex = renewable_capex / total_hard_capex
+    tax_credit_amount = total_capex * renewable_proportion_of_hard_capex * (investment_tax_credit_pct / 100)
+    proforma.loc[1, 'Federal ITC'] = tax_credit_amount
+
+    # Calculate depreciation for each year
+    for year in range(1, 21):  # 20-year depreciation schedule
+        
+        # Calculate depreciation amount
+        proforma.loc[year, 'Depreciation Schedule'] = depreciation_schedule[year-1]
+        # IRS rule: we have to reduce depreciable basis by half the tax credit amount
+        amount_that_is_depreciable = total_capex - tax_credit_amount / 2
+        proforma.loc[year, 'Depreciation (MACRS)'] = -1.0 * (depreciation_schedule[year-1] / 100) * amount_that_is_depreciable
+
+    # Calculate taxable income and tax benefit/liability for each year
+    tax_rate = combined_tax_rate_pct / 100
+    for year in range(1, 21):
+        if year in proforma.index:
+            # Taxable income is EBITDA minus depreciation minus interest
+            proforma.loc[year, 'Taxable Income'] = (
+                proforma.loc[year, 'EBITDA'] + 
+                proforma.loc[year, 'Depreciation (MACRS)'] + 
+                proforma.loc[year, 'Interest Expense']
+            )
+            
+            # Tax benefit/liability is taxable income times tax rate, plus ITC in year 1
+            tax_on_income = proforma.loc[year, 'Taxable Income'] * tax_rate
+            itc_benefit = proforma.loc[year, 'Federal ITC'] if year == 1 else 0
+            proforma.loc[year, 'Tax Benefit (Liability)'] = -1.0 * tax_on_income + itc_benefit
+
     # Format numbers
     proforma = proforma.round(2)
     

@@ -2,6 +2,7 @@
 
 import streamlit as st
 from typing import Dict
+import pandas as pd
 
 from charts import create_capacity_chart
 
@@ -54,10 +55,66 @@ def create_input_sections(unique_values) -> Dict:
             cost_of_debt = st.number_input("Cost of Debt (%)", value=7.5, min_value=0.0, max_value=100.0)
             leverage = st.number_input("Leverage (%)", value=70.0, min_value=0.0, max_value=100.0)
             debt_term = st.number_input("Debt Term (years)", value=20, min_value=1)
-        with col2:
             cost_of_equity = st.number_input("Cost of Equity (%)", value=11.0, min_value=0.0, max_value=100.0)
-            investment_tax_credit = st.number_input("Investment Tax Credit (%)", value=30.0, min_value=0.0, max_value=100.0)
+            investment_tax_credit_pct = st.number_input("Investment Tax Credit (%)", value=30.0, min_value=0.0, max_value=100.0)
             combined_tax_rate = st.number_input("Combined Tax Rate (%)", value=21.0, min_value=0.0, max_value=100.0)
+        
+        with col2:
+            # Create default MACRS depreciation schedule (20 years)
+            if 'depreciation_schedule' not in st.session_state:
+                st.session_state.depreciation_schedule = pd.DataFrame({
+                    'Year': range(1, 21),
+                    'Depreciation (%)': [
+                        20.0,  # Year 1
+                        32.0,  # Year 2
+                        19.20,  # Year 3
+                        11.52,  # Year 4
+                        11.52,  # Year 5
+                        5.76,   # Year 6
+                        0.0,    # Year 7
+                        0.0,    # Year 8
+                        0.0,    # Year 9
+                        0.0,    # Year 10
+                        0.0,    # Year 11
+                        0.0,    # Year 12
+                        0.0,    # Year 13
+                        0.0,    # Year 14
+                        0.0,    # Year 15
+                        0.0,    # Year 16
+                        0.0,    # Year 17
+                        0.0,    # Year 18
+                        0.0,    # Year 19
+                        0.0     # Year 20
+                    ]
+                })
+            
+            # Display editable depreciation schedule
+            edited_depreciation = st.data_editor(
+                st.session_state.depreciation_schedule,
+                column_config={
+                    "Year": st.column_config.NumberColumn(
+                        "Year",
+                        help="Year of depreciation",
+                        min_value=1,
+                        max_value=20,
+                        step=1,
+                        disabled=True
+                    ),
+                    "Depreciation (%)": st.column_config.NumberColumn(
+                        "Depreciation (%)",
+                        help="Percentage of total CAPEX to depreciate in this year",
+                        min_value=0.0,
+                        max_value=100.0,
+                        step=0.1,
+                        format="%.1f%%"
+                    )
+                },
+                hide_index=True,
+                width=400
+            )
+            
+            # Update session state with edited values
+            st.session_state.depreciation_schedule = edited_depreciation
     
     # CAPEX Inputs
     with st.expander("CAPEX Inputs"):
@@ -117,28 +174,24 @@ def create_input_sections(unique_values) -> Dict:
     # O&M Inputs
     with st.expander("O&M Inputs"):
         col1, col2 = st.columns(2)
+        
+        # Column 1: Asset-specific O&M
         with col1:
+            st.subheader("Operations and Maintenance")
+            fuel_price = st.number_input("Fuel Price ($/MMBtu)", value=5.00, format="%.2f")
             solar_om_fixed = st.number_input("Solar Fixed O&M ($/kW)", value=11, format="%d")
             bess_om_fixed = st.number_input("BESS Fixed O&M ($/kW)", value=2.5, format="%.1f")
-            bos_om_fixed = st.number_input("BOS Fixed O&M ($/kW-load)", value=6.0, format="%.1f")
+            generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
+            generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
+            bos_om_fixed = st.number_input("Balance of System Fixed O&M ($/kW-load)", value=6.0, format="%.1f")
             soft_om_pct = st.number_input("Soft O&M (% of hard capex)", value=0.25, format="%.2f")
             
-            # Generator O&M costs based on type
-            if generator_type == "Gas Engine":
-                generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
-                generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
-            elif generator_type == "Gas Turbine":
-                generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
-                generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
-            else:  # Diesel Generator
-                generator_om_fixed = st.number_input("Generator Fixed O&M ($/kW)", value=10, format="%d")
-                generator_om_variable = st.number_input("Generator Variable O&M ($/kWh)", value=0.025, format="%.3f")
-            
-            om_escalator = st.number_input("O&M Escalator (% p.a.)", value=2.50, min_value=0.0)
+        # Column 2: System-wide O&M and Escalators
         with col2:
-            fuel_price = st.number_input("Fuel Price ($/MMBtu)", value=5.00, min_value=0.0)
-            fuel_escalator = st.number_input("Fuel Escalator (% p.a.)", value=3.00, min_value=0.0)
-    
+            st.subheader("Escalators")
+            om_escalator = st.number_input("O&M Escalator (% p.a.)", value=2.50, format="%.2f")
+            fuel_escalator = st.number_input("Fuel Escalator (% p.a.)", value=3.00, format="%.2f")
+
     return {
         'location': location,
         'datacenter_load_mw': datacenter_load,
@@ -160,9 +213,10 @@ def create_input_sections(unique_values) -> Dict:
         'leverage_pct': leverage,
         'debt_term_years': debt_term,
         'cost_of_equity_pct': cost_of_equity,
-        'investment_tax_credit_pct': investment_tax_credit,
+        'investment_tax_credit_pct': investment_tax_credit_pct,
         'combined_tax_rate_pct': combined_tax_rate,
         'construction_time_years': construction_time,
+        'depreciation_schedule': edited_depreciation['Depreciation (%)'].tolist(),
         # Solar PV CAPEX
         'pv_modules': pv_modules,
         'pv_inverters': pv_inverters,

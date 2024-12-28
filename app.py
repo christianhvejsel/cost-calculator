@@ -117,7 +117,7 @@ def main():
         st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
     
     # Generate Pro Forma button and display
-    if st.button('Generate Pro Forma'):
+    if st.button('Generate Proforma'):
         pro_forma = calculate_pro_forma(
             simulation_data=filtered_data,
             location=inputs['location'],
@@ -144,7 +144,9 @@ def main():
             leverage_pct=inputs['leverage_pct'],
             cost_of_debt_pct=inputs['cost_of_debt_pct'],
             combined_tax_rate_pct=inputs['combined_tax_rate_pct'],
-            lcoe_dollar_per_mwh=inputs['lcoe_dollar_per_mwh']
+            lcoe_dollar_per_mwh=inputs['lcoe_dollar_per_mwh'],
+            investment_tax_credit_pct=inputs['investment_tax_credit_pct'],
+            depreciation_schedule=inputs['depreciation_schedule']
         )
         
         if pro_forma is not None:
