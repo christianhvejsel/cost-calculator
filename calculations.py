@@ -16,6 +16,18 @@ _POWERFLOW_COLUMNS_TO_ASSIGN = [
 ]
 
 
+_EXCLUDE_FROM_NPV = [
+    'Fuel Unit Cost', 'Solar Fixed O&M Rate', 'Battery Fixed O&M Rate',
+    'Generator Fixed O&M Rate', 'Generator Variable O&M Rate', 'BOS Fixed O&M Rate',
+    'Soft O&M Rate', 'LCOE', 'Debt Outstanding, Yr Start', 'Depreciation Schedule'
+]
+
+_CALCULATE_TOTALS = [
+    'Solar Output - Net (MWh)', 'BESS Net Output (MWh)', 'Generator Output (MWh)',
+    'Generator Fuel Input (MMBtu)', 'Load Served (MWh)'
+]
+
+
 def calculate_capex(inputs: Dict) -> Dict[str, float]:
     """Calculate CAPEX subtotals for each system component.
     
@@ -84,6 +96,21 @@ def calculate_capex(inputs: Dict) -> Dict[str, float]:
         'system_integration': system_integration_capex / 1_000_000,
         'soft_costs': soft_costs / 1_000_000
     }
+
+def calculate_npv(values: pd.Series, discount_rate: float, construction_time_years: int) -> float:
+    """Calculate NPV of a series of cash flows.
+    
+    Args:
+        values (pd.Series): Series of cash flows indexed by year
+        discount_rate (float): Annual discount rate in percentage (e.g., 11.0 for 11%)
+        construction_time_years (int): Number of years to shift the cash flows back by
+    Returns:
+        float: Net Present Value of the cash flows
+    """
+    values = values.astype(float).fillna(0)
+    years = values.index.astype(float) + construction_time_years
+    
+    return sum(values / (1 + discount_rate/100)**years)
 
 def calculate_pro_forma(
     simulation_data: pd.DataFrame,
@@ -180,7 +207,7 @@ def calculate_pro_forma(
     proforma.loc[1, 'Debt Outstanding, Yr Start'] = total_debt
     proforma.loc[1, 'Federal ITC'] = tax_credit_amount
 
-    #### CONSTRUCTION PERIOD ####
+    ###### CONSTRUCTION PERIOD ######
     construction_years = range(-construction_time_years + 1, 1)
     capex_per_year = total_capex / construction_time_years
     
@@ -188,14 +215,15 @@ def calculate_pro_forma(
     proforma.loc[construction_years, 'Debt Contribution'] = capex_per_year * (leverage_pct / 100)  # Debt portion
     proforma.loc[construction_years, 'Equity Capex'] = -1.0 * capex_per_year * (1 - leverage_pct / 100)  # Equity portion
 
-    #### OPERATING PERIOD ####
+    ###### OPERATING PERIOD ######
     operating_years = proforma.index > 0
-    years_array = proforma.index[operating_years] - 1  # Subtract 1 to start from year 0
+    operating_years_zero_indexed = proforma.index[operating_years] - 1
 
     # Calculate escalation factors for all years
-    om_escalation = (1 + om_escalator_pct/100)**years_array
-    fuel_escalation = (1 + fuel_escalator_pct/100)**years_array
+    om_escalation = (1 + om_escalator_pct/100)**operating_years_zero_indexed
+    fuel_escalation = (1 + fuel_escalator_pct/100)**operating_years_zero_indexed
 
+    ### Unit Rates ###
     # Calculate unit rates for all operating years
     proforma.loc[operating_years, 'Fuel Unit Cost'] = -1.0 * fuel_price_dollar_per_mmbtu * fuel_escalation
     proforma.loc[operating_years, 'Solar Fixed O&M Rate'] = -1.0 * solar_om_fixed_dollar_per_kw * om_escalation
@@ -233,6 +261,7 @@ def calculate_pro_forma(
         proforma.loc[operating_years, 'Variable O&M Cost']
     )
 
+    ### Earnings ###
     # Set LCOE from input and calculate Revenue
     proforma.loc[operating_years, 'LCOE'] = lcoe_dollar_per_mwh
     proforma.loc[operating_years, 'Revenue'] = (
@@ -246,7 +275,7 @@ def calculate_pro_forma(
         proforma.loc[operating_years, 'Total Operating Costs']
     )
 
-    # Calculate debt and tax metrics for each year
+    ### Debt, Tax, Capital ###
     for year in [y for y in years if y > 0]:
         # Interest expense is rate * start of period balance
         proforma.loc[year, 'Interest Expense'] = -1.0 * proforma.loc[year, 'Debt Outstanding, Yr Start'] * interest_rate
@@ -266,11 +295,12 @@ def calculate_pro_forma(
         proforma.loc[year, 'Taxable Income'] = (
             proforma.loc[year, 'EBITDA'] + 
             proforma.loc[year, 'Depreciation (MACRS)'] + 
-            proforma.loc[year, 'Interest Expense']
+            proforma.loc[year, 'Interest Expense']  # This is from the Debt section
         )
-        tax_on_income = proforma.loc[year, 'Taxable Income'] * (combined_tax_rate_pct / 100)
-        tax_credit_benefit = proforma.loc[year, 'Federal ITC'] if proforma.loc[year, 'Federal ITC'] is not None else 0
-        proforma.loc[year, 'Tax Benefit (Liability)'] = -1.0 * tax_on_income + tax_credit_benefit
+        proforma.loc[year, 'Interest Expense (Tax)'] = proforma.loc[year, 'Interest Expense']  # Copy for display in Tax section
+
+    tax_on_income = proforma['Taxable Income'] * (combined_tax_rate_pct / 100)
+    proforma['Tax Benefit (Liability)'] = -1.0 * tax_on_income + proforma['Federal ITC'].fillna(0)
 
     # Calculate After-Tax Net Equity Cash Flow
     proforma['After-Tax Net Equity Cash Flow'] = (
@@ -279,5 +309,18 @@ def calculate_pro_forma(
         proforma['Tax Benefit (Liability)'].fillna(0) +
         proforma['Equity Capex'].fillna(0)
     )
+
+    # Calculate NPVs for financial metrics
+    for col in proforma.columns:
+        # For consumption metrics, just sum, don't discount
+        if col in _CALCULATE_TOTALS:
+            proforma.loc['NPV', col] = proforma.loc[proforma.index != 'NPV', col].sum()
+        # Don't calculate NPV or total for these columns
+        elif col in _EXCLUDE_FROM_NPV:
+            proforma.loc['NPV', col] = None
+        # Calculate NPV for everything else
+        elif col not in ['Operating Year']:
+            values = proforma.loc[proforma.index != 'NPV', col].fillna(0)
+            proforma.loc['NPV', col] = calculate_npv(values, cost_of_equity_pct, construction_time_years)
 
     return proforma.round(2)

@@ -75,22 +75,17 @@ def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float,
     )
     return fig
 
+def calculate_npv(values: pd.Series, discount_rate: float) -> float:
+    """Calculate NPV of a series of cash flows."""
+    years = values.index.astype(float)
+    return sum(values / (1 + discount_rate/100)**(years))
+
 def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
-    """
-    Format proforma with years as columns and metrics as rows.
-    
-    Args:
-        proforma (pd.DataFrame): Raw proforma data
-    
-    Returns:
-        pd.DataFrame: Formatted proforma with proper structure and grouping
-    """
+    """Format proforma with years as columns and metrics as rows."""
     # Define row groups and their metrics
     row_groups = {
         'Consumption': [
-            'Solar Output - Raw (MWh)',
             'Solar Output - Net (MWh)',
-            'BESS Throughput (MWh)',
             'BESS Net Output (MWh)',
             'Generator Output (MWh)',
             'Generator Fuel Input (MMBtu)',
@@ -123,7 +118,7 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
         'Tax': [
             'Depreciation Schedule',
             'Depreciation (MACRS)',
-            'Interest Expense',
+            'Interest Expense (Tax)',
             'Taxable Income',
             'Federal ITC',
             'Tax Benefit (Liability)'
@@ -137,17 +132,9 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
             'After-Tax Net Equity Cash Flow'
         ]
     }
-    
+
     # Create rows for the formatted dataframe
     rows = []
-    
-    # Add header row
-    rows.append({
-        'Group': 'Year',
-        'Metric': '',
-        'Units': '',
-        **{str(year): year for year in proforma.index}
-    })
     
     # Add metrics by group
     for group, metrics in row_groups.items():
@@ -156,7 +143,8 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
             'Group': group,
             'Metric': '',
             'Units': '',
-            **{str(year): '' for year in proforma.index}
+            'Totals/NPV': '',
+            **{str(year): '' for year in proforma.index if year != 'NPV'}
         })
         
         # Add metrics in the group
@@ -165,9 +153,44 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
                 rows.append({
                     'Group': '',
                     'Metric': metric,
-                    'Units': METRIC_UNITS.get(metric, ''),
-                    **{str(year): proforma.loc[year, metric] if year in proforma.index else None 
-                       for year in proforma.index}
+                    'Units': {
+                        'Solar Output - Net (MWh)': 'MWh',
+                        'BESS Net Output (MWh)': 'MWh',
+                        'Generator Output (MWh)': 'MWh',
+                        'Generator Fuel Input (MMBtu)': 'MMBtu',
+                        'Load Served (MWh)': 'MWh',
+                        'Fuel Unit Cost': '$/MMBtu',
+                        'Solar Fixed O&M Rate': '$/kW',
+                        'Battery Fixed O&M Rate': '$/kW',
+                        'Generator Fixed O&M Rate': '$/kW',
+                        'Generator Variable O&M Rate': '$/kWh',
+                        'BOS Fixed O&M Rate': '$/kW-load',
+                        'Soft O&M Rate': '%',
+                        'LCOE': '$/MWh',
+                        'Revenue': '$M',
+                        'Fuel Cost': '$M',
+                        'Fixed O&M Cost': '$M',
+                        'Variable O&M Cost': '$M',
+                        'Total Operating Costs': '$M',
+                        'EBITDA': '$M',
+                        'Debt Outstanding, Yr Start': '$M',
+                        'Interest Expense': '$M',
+                        'Principal Payment': '$M',
+                        'Debt Service': '$M',
+                        'Depreciation Schedule': '%',
+                        'Depreciation (MACRS)': '$M',
+                        'Interest Expense (Tax)': '$M',
+                        'Taxable Income': '$M',
+                        'Federal ITC': '$M',
+                        'Tax Benefit (Liability)': '$M',
+                        'Capital Expenditure': '$M',
+                        'Debt Contribution': '$M',
+                        'Equity Capex': '$M',
+                        'After-Tax Net Equity Cash Flow': '$M'
+                    }.get(metric, ''),
+                    'Totals/NPV': proforma.loc['NPV', metric] if 'NPV' in proforma.index else '',
+                    **{str(year): proforma.loc[year, metric] if year in proforma.index and year != 'NPV' else None 
+                       for year in proforma.index if year != 'NPV'}
                 })
     
     # Create DataFrame
@@ -176,12 +199,7 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
     return display_df
 
 def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
-    """
-    Display proforma in Streamlit with proper formatting and styling.
-    
-    Args:
-        proforma (Optional[pd.DataFrame]): Proforma data to display
-    """
+    """Display proforma in Streamlit with proper formatting and styling."""
     if proforma is None:
         st.error("No matching simulation data found for the selected inputs.")
         return
@@ -209,16 +227,9 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
             return val
             
         row_idx = mask.idxmax()
-        metric = display_df.loc[row_idx, 'Metric']
         unit = display_df.loc[row_idx, 'Units']
-        group = display_df.loc[row_idx, 'Group']
-        
         is_negative = val < 0
         abs_val = abs(val)
-        
-        # Special case for Year row
-        if group == 'Year':
-            return f"{int(abs_val)}"
         
         # Format based on unit type
         if unit in ['MWh', 'MMBtu']:
@@ -244,21 +255,28 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
     
     styled_df = styled_df.apply(highlight_groups, axis=1)
     
-    # Format the DataFrame
+    # Display with frozen columns
     st.dataframe(
         styled_df,
         column_config={
             "Group": st.column_config.Column(
                 width="small",
+                help="Metric group"
             ),
             "Metric": st.column_config.Column(
                 width="medium",
+                help="Individual metric"
             ),
             "Units": st.column_config.Column(
                 width="small",
+                help="Metric units"
             ),
+            "Totals/NPV": st.column_config.Column(
+                width="small",
+                help="Sum for Consumption, NPV for financial metrics"
+            )
         },
         hide_index=True,
-        height=1000,
-        use_container_width=True
+        use_container_width=True,
+        height=1000
     ) 
