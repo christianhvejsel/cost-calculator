@@ -7,7 +7,7 @@ from typing import Dict
 from data_loader import load_simulation_data, get_unique_values
 from calculations import calculate_pro_forma, calculate_capex
 from st_formatting import format_proforma, display_proforma
-from charts import create_capacity_chart, create_capex_chart, create_energy_mix_chart
+from charts import create_capex_chart, create_energy_mix_chart
 from inputs import create_input_sections
 
 
@@ -30,18 +30,20 @@ def filter_simulation_data(df: pd.DataFrame, location: str, system_spec: str) ->
 
 def calculate_energy_mix(filtered_data: pd.DataFrame) -> Dict[str, float]:
     """Calculate lifetime energy mix from simulation data."""
-    solar_twh = filtered_data['Solar Output - Net (MWh)'].sum() / 1_000_000
-    bess_twh = filtered_data['BESS Net Output (MWh)'].sum() / 1_000_000
+    solar_gen_net_twh = filtered_data['Solar Output - Net (MWh)'].sum() / 1_000_000
+    solar_to_bess_twh = filtered_data['BESS Throughput (MWh)'].sum() / 1_000_000
+    bess_to_load_twh = filtered_data['BESS Net Output (MWh)'].sum() / 1_000_000
     generator_twh = filtered_data['Generator Output (MWh)'].sum() / 1_000_000
     total_load_twh = filtered_data['Load Served (MWh)'].sum() / 1_000_000
     
     renewable_percentage = 100 * (1 - generator_twh / total_load_twh)
     
     return {
-        'solar_twh': solar_twh,
-        'bess_twh': bess_twh,
+        'solar_gen_net_twh': solar_gen_net_twh,
+        'solar_to_load_twh': solar_gen_net_twh - solar_to_bess_twh,
+        'bess_to_load_twh': bess_to_load_twh,
         'generator_twh': generator_twh,
-        'total_generation_twh': solar_twh + bess_twh + generator_twh,
+        'total_generation_twh': solar_gen_net_twh + bess_to_load_twh + generator_twh,
         'total_load_twh': total_load_twh,
         'renewable_percentage': renewable_percentage
     }

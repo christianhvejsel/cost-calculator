@@ -96,30 +96,30 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
 
 def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
     """Create a stacked horizontal bar chart showing energy mix breakdown."""
-    total_energy = energy_mix['solar_twh'] + energy_mix['bess_twh'] + energy_mix['generator_twh']
+    total_energy = energy_mix['total_load_twh']
     
     fig = go.Figure(data=[
         go.Bar(
-            name='Solar',
-            x=[energy_mix['solar_twh']],
+            name='Solar (direct)',
+            x=[energy_mix['solar_to_load_twh']],
             y=[''],  # Empty label
             orientation='h',
             marker_color=SOLAR_COLOR,
-            text=f"{energy_mix['solar_twh']:,.1f} TWh",
+            text=f"{energy_mix['solar_to_load_twh']:,.1f} TWh",
             textposition='inside',
-            hovertemplate="Solar: %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
-            customdata=[(energy_mix['solar_twh']/total_energy)*100]
+            hovertemplate="Solar (direct): %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
+            customdata=[(energy_mix['solar_to_load_twh']/total_energy)*100]
         ),
         go.Bar(
-            name='BESS',
-            x=[energy_mix['bess_twh']],
+            name='Solar (via BESS)',
+            x=[energy_mix['bess_to_load_twh']],
             y=[''],  # Empty label
             orientation='h',
             marker_color=BESS_COLOR,
-            text=f"{energy_mix['bess_twh']:,.1f} TWh",
+            text=f"{energy_mix['bess_to_load_twh']:,.1f} TWh",
             textposition='inside',
-            hovertemplate="BESS: %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
-            customdata=[(energy_mix['bess_twh']/total_energy)*100]
+            hovertemplate="Solar (via BESS): %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
+            customdata=[(energy_mix['bess_to_load_twh']/total_energy)*100]
         ),
         go.Bar(
             name='Generator',
@@ -135,7 +135,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
     ])
 
     fig.update_layout(
-        title='Lifetime Energy Mix',
+        title='Lifetime Energy to Load',
         xaxis_title='Energy (TWh)',
         barmode='stack',
         height=150,
