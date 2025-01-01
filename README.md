@@ -9,6 +9,7 @@ python calculate_lcoe.py --location "El Paso, TX" --solar 100 --bess 100 --gener
 
 ## 2. Streamlit interface
 `streamlit run app.py`
+[lcoe-solar-datacenter.streamlit.app](https://lcoe-solar-datacenter.streamlit.app/)
 
 ## 3. Python
 ```python
