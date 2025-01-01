@@ -26,13 +26,13 @@ DEFAULTS_GENERATORS = {
     },
     'Gas Turbine': {
         'capex': {
-            'gensets': 1000,
-            'balance_of_system': 250,
-            'labor': 200
+            'gensets': 635,
+            'balance_of_system': 150,
+            'labor': 100
         },
         'opex': {
-            'fixed_om': 12.00,
-            'variable_om': 0.030
+            'fixed_om': 15.00,
+            'variable_om': 0.005
         }
     }
 }
