@@ -197,7 +197,9 @@ def create_input_sections(unique_values) -> Dict:
     
     # CAPEX Inputs
     with st.expander("CAPEX Inputs"):
-        construction_time = st.number_input("Construction Time (years)", value=DEFAULTS_FINANCIAL['construction_time_years'], min_value=1)
+        # TODO: make this dynamic
+        # construction_time = st.number_input("Construction Time (years)", value=DEFAULTS_FINANCIAL['construction_time_years'], min_value=1)
+        construction_time = DEFAULTS_FINANCIAL['construction_time_years']
         
         # Solar PV
         st.subheader("Solar PV")
