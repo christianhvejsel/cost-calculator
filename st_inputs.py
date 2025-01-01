@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 from typing import Dict
 
-from charts import create_capacity_chart
+from st_output_components import create_capacity_chart
 from defaults import (
     DATACENTER_DEMAND_MW, BESS_HRS_STORAGE, DEFAULTS_GENERATORS,
     DEFAULTS_SOLAR_CAPEX, DEFAULTS_BESS_CAPEX, DEFAULTS_SYSTEM_INTEGRATION_CAPEX,

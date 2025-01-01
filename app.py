@@ -6,8 +6,10 @@ import time
 
 from data_loader import get_unique_values
 from calculations import DataCenter
-from st_formatting import format_proforma, display_proforma
-from charts import create_capex_chart, create_energy_mix_chart
+from st_output_components import (
+    format_proforma, display_proforma, create_capex_chart,
+    create_energy_mix_chart, create_capacity_chart
+)
 from st_inputs import create_input_sections, calculate_capex_subtotals
 
 
