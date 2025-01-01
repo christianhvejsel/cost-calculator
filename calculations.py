@@ -63,6 +63,7 @@ class DataCenter:
     generator_type: str = 'Gas Engine'
     datacenter_load_mw: int = DATACENTER_DEMAND_MW
     bess_hrs_storage: int = BESS_HRS_STORAGE
+
     # CAPEX rate subtotals
     solar_capex_total_dollar_per_w: float = sum(DEFAULTS_SOLAR_CAPEX.values())
     bess_capex_total_dollar_per_kwh: float = sum(DEFAULTS_BESS_CAPEX.values())
@@ -90,14 +91,18 @@ class DataCenter:
     cost_of_equity_pct: float = DEFAULTS_FINANCIAL['cost_of_equity_pct']
     combined_tax_rate_pct: float = DEFAULTS_FINANCIAL['combined_tax_rate_pct']
     construction_time_years: int = DEFAULTS_FINANCIAL['construction_time_years']
+
+    # Optional: simulation data can be passed in if already loaded
+    simulation_data: pd.DataFrame = None
     
     def __post_init__(self):
-        self._load_simulation_data()
+        if self.simulation_data is None:
+            self.simulation_data = load_simulation_data(SIMULATION_DATA_PATH)
+
+        self._filter_simulation_data()
     
-    def _load_simulation_data(self, data_path: Union[str, Path] = SIMULATION_DATA_PATH) -> None:
-        """Load and filter simulation data based on configuration."""
-        self.simulation_data = load_simulation_data(data_path)
-        
+    def _filter_simulation_data(self) -> None:
+        """Filter simulation data based on configuration."""
         # Create system spec string and extract relevant case
         system_spec = f"{int(self.solar_pv_capacity_mw)}MW | {int(self.bess_max_power_mw)}MW | {int(self.generator_capacity_mw)}MW"
         self.filtered_data = self.simulation_data[
@@ -273,34 +278,40 @@ class DataCenter:
         return sum(values / (1 + self.cost_of_equity_pct/100)**years)
 
     def calculate_lcoe(self) -> Tuple[float, pd.DataFrame]:
-        """Calculate LCOE using bisection method.
-        Seeks NPV of equity cash flows = 0.
+        """Calculate LCOE by seeking NPV of equity cash flows = 0 
+        This uses Newton's method, which converges much faster than the bisection method.
         
         Returns:
             Tuple[float, pd.DataFrame]: LCOE and proforma
         """
-        lower_bound = LCOE_OPT_LOWER_BOUND
-        upper_bound = LCOE_OPT_UPPER_BOUND
-        tolerance = LCOE_OPT_TOLERANCE
-        max_iterations = LCOE_OPT_MAX_ITERATIONS
-        iteration = 0
+        # Initial guess: average of bounds
+        lcoe_guess = (LCOE_OPT_LOWER_BOUND + LCOE_OPT_UPPER_BOUND) / 2
         
-        while iteration < max_iterations:
-            mid_point = (lower_bound + upper_bound) / 2
-            proforma = self.calculate_pro_forma(mid_point)
+        for iteration in range(LCOE_OPT_MAX_ITERATIONS):
+            # Calculate NPV at current LCOE
+            proforma = self.calculate_pro_forma(lcoe_guess)
             npv = proforma.loc['NPV', 'After-Tax Net Equity Cash Flow']
             
-            if abs(npv) < tolerance:
-                return mid_point, proforma
-            elif npv > 0:
-                upper_bound = mid_point
-            else:
-                lower_bound = mid_point
+            # Check if we've converged
+            if abs(npv) < LCOE_OPT_TOLERANCE:
+                return lcoe_guess, proforma
                 
-            iteration += 1
+            # Approximate derivative using small delta
+            delta = lcoe_guess * 0.001
+            npv2 = self.calculate_pro_forma(lcoe_guess + delta).loc['NPV', 'After-Tax Net Equity Cash Flow']
+            derivative = (npv2 - npv) / delta
             
-        # If we hit max iterations, return the best estimate
-        return (lower_bound + upper_bound) / 2, proforma
+            # Calculate Newton step
+            lcoe_new = lcoe_guess - npv / derivative
+            
+            # Add bounds checking to prevent negative LCOE
+            if lcoe_new <= 0:
+                lcoe_guess = lcoe_guess / 2  # Back off more conservatively
+            else:
+                lcoe_guess = lcoe_new
+                
+        # If we hit max iterations, return current best estimate
+        return lcoe_guess, proforma
 
     def calculate_energy_mix(self) -> Dict[str, float]:
         """Calculate lifetime energy mix from simulation data."""
