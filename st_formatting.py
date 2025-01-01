@@ -178,11 +178,8 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
     
     # Create a style function for negative numbers
     def style_negative(val):
-        try:
-            if isinstance(val, (int, float)) and val < 0:
-                return 'color: red; font-weight: bold;'
-        except:
-            pass
+        if isinstance(val, (int, float)) and val < 0:
+            return 'color: red; font-weight: bold;'
         return ''
     
     # Format numbers with units and handle negatives

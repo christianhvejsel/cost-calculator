@@ -1,6 +1,9 @@
 import pandas as pd
+from typing import Dict, List
 
-def load_simulation_data():
+from defaults import SIMULATION_DATA_PATH
+
+def load_simulation_data(file_path: str) -> pd.DataFrame:
     """Load and preprocess simulation data from CSV file."""
     # Define numeric columns
     numeric_cols = [
@@ -13,17 +16,17 @@ def load_simulation_data():
         'BESS Throughput (MWh)',
         'BESS Net Output (MWh)',
         'Generator Output (MWh)',
-        'Generator Fuel Input (MMBtu)',
+        # 'Generator Fuel Input (MMBtu)',
         'Load Served (MWh)'
     ]
     
     try:
         df = pd.read_csv(
-            "powerflow_output_frozen.csv",
+            file_path,
             thousands=',',  # Handle comma-separated numbers
         )
     except FileNotFoundError:
-        raise FileNotFoundError("Simulation data file not found. Please ensure 'powerflow_output_frozen.csv' is in the same directory.")
+        raise FileNotFoundError(f"Simulation data file not found. Please ensure {file_path} is present.")
         
     # Convert numeric columns to float
     for col in numeric_cols:
@@ -31,8 +34,9 @@ def load_simulation_data():
     
     return df
 
-def get_unique_values(df):
+def get_unique_values() -> Dict[str, List[str]]:
     """Get unique values for dropdowns."""
+    df = load_simulation_data(SIMULATION_DATA_PATH)
     locations = sorted(df['Location'].unique())
     solar_capacities = sorted([int(x) for x in df['Solar Capacity (MW-DC)'].unique() if not pd.isna(x)])
     bess_capacities = sorted([int(x) for x in df['BESS Capacity (MW-AC)'].unique() if not pd.isna(x)])
