@@ -1,7 +1,9 @@
 There are three ways to use:
 
 ## 1. Command line interface
-`python calculate_lcoe.py --location "El Paso, TX" --solar 100 --bess 100 --generator 125 --generator-type "Gas Engine"`
+```bash
+python calculate_lcoe.py --location "El Paso, TX" --solar 100 --bess 100 --generator 125 --generator-type "Gas Engine"
+```
 
 (See `calculate_lcoe.py` for all options)
 
