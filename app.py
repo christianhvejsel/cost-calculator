@@ -72,6 +72,7 @@ def main():
             debt_term_years=inputs['debt_term_years'],
             leverage_pct=inputs['leverage_pct'],
             cost_of_debt_pct=inputs['cost_of_debt_pct'],
+            cost_of_equity_pct=inputs['cost_of_equity_pct'],
             combined_tax_rate_pct=inputs['combined_tax_rate_pct'],
             investment_tax_credit_pct=inputs['investment_tax_credit_pct'],
             depreciation_schedule=inputs['depreciation_schedule']
