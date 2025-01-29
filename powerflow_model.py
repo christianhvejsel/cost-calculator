@@ -1,3 +1,10 @@
+"""
+Power flow model for simulating hybrid solar + storage + generator system performance.
+
+It uses PVGIS data for solar resource assessment and models hour-by-hour battery flows & degradation 
+over the lifetime of the project.
+"""
+
 import polars as pl
 import pandas as pd
 from pvlib import pvsystem, modelchain, location, iotools
@@ -11,274 +18,287 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATA_CENTER_LOAD_MW = 100 
+# System constants
+DATACENTER_DEMAND_MW = 100 
 SYSTEM_LIFETIME_YEARS = 20
-BATT_ROUND_TRIP_EFFICIENCY = 0.92
-BATT_DURATION_HOURS = 4
-BATT_DEGRADATION_PER_YEAR = 0.35/20
-SOLAR_DEGRADATION_PER_YEAR = 0.005
-GENERATOR_HEATRATE = 8989.3 # BTU/kWh
+BATTERY_ROUND_TRIP_EFFICIENCY = 0.92
+BATTERY_DURATION_HOURS = 4
+BATTERY_DEGRADATION_PCT_PER_YEAR = 0.35/20  # 0.35% total over 20 years
+SOLAR_DEGRADATION_PCT_PER_YEAR = 0.005  # 0.5% per year
+GENERATOR_HEAT_RATE_BTU_PER_KWH = 8989.3
 DC_AC_RATIO = 1.2
 
-
-########## PV_LIB_PARAMS ##########
-# pdc0: DC power rating at Standard Test Conditions (STC)
-# Normalized to 1 kW so we can scale the output later
-# STC = 1000 W/m2 irradiance, 25°C cell temp, AM1.5 spectrum
-PDC0 = 1
-# gamma_pdc: Temperature coefficient of power in units of 1/°C
-# Represents how much power output changes with cell temperature
-# -0.004 means power decreases 0.4% per °C increase in temperature
-GAMMA_PDC = -0.004
-
-# Parameters for the Sandia temperature model that calculates
-# cell temperature from ambient conditions
-# a: Wind speed coefficient in units of °C/(W/m2)
-# Represents how wind speed affects cell temperature
-TEMP_A = -3.56
-# b: Wind speed coefficient in units of °C/(W/m2)/(m/s)
-# Represents how wind speed affects the rate of heat transfer
-TEMP_B = -0.075
-# deltaT: Temperature difference between cell and module back surface
-# Typical value of 3°C for glass-back modules
-TEMP_DELTA_T = 3
-
-PVLIB_BASE_PARAMETERS = {
-    'module_parameters': {'pdc0': PDC0, 'gamma_pdc': GAMMA_PDC},
-    'temperature_model_parameters': {'a': TEMP_A, 'b': TEMP_B, 'deltaT': TEMP_DELTA_T}
+# PVLib configuration parameters
+PVLIB_CONFIG = {
+    'module_parameters': {
+        'pdc0': 1,  # Normalized to 1 kW for scaling
+        'gamma_pdc': -0.004  # Temperature coefficient (%/°C)
+    },
+    'temperature_model_parameters': {
+        'a': -3.56,  # Wind speed coefficient (°C/(W/m2))
+        'b': -0.075,  # Wind speed coefficient (°C/(W/m2)/(m/s))
+        'deltaT': 3  # Temperature difference between cell and module back (°C)
+    }
 }
 
-
-
-def get_solar_ac_dataframe(latitude: float, longitude: float, system_type='single-axis', surface_tilt=20, surface_azimuth=180):
+def get_solar_ac_dataframe(latitude: float, longitude: float, system_type: str = 'single-axis', 
+                          surface_tilt: float = 20, surface_azimuth: float = 180) -> pd.DataFrame:
     """
-    Calculate the AC output of a PV system based on location and system type.
+    Calculate the AC output profile of a PV system based on location and configuration.
 
-    Parameters:
-    - latitude (float): Latitude of the location
-    - longitude (float): Longitude of the location
-    - system_type (str): Type of mounting system ('fixed-tilt' or 'single-axis')
-    - surface_tilt (float): Tilt angle of the panels in degrees from horizontal (default: 20)
-                           Only used for fixed-tilt systems
-    - surface_azimuth (float): Azimuth angle of the panels in degrees clockwise from north
-                              (default: 180, which is facing south in northern hemisphere)
-                              Only used for fixed-tilt systems
+    Uses PVGIS typical meteorological year (TMY) data to simulate solar PV performance,
+    accounting for temperature effects, solar angle, and system losses. The output is
+    normalized to 1 MW-DC of installed capacity.
+
+    Args:
+        latitude: Site latitude in decimal degrees (positive for northern hemisphere)
+        longitude: Site longitude in decimal degrees (positive for eastern hemisphere)
+        system_type: Mounting system type ('fixed-tilt' or 'single-axis')
+        surface_tilt: Panel tilt angle in degrees from horizontal (fixed-tilt only)
+        surface_azimuth: Panel azimuth angle in degrees clockwise from north (fixed-tilt only)
 
     Returns:
-    - ac (pd.DataFrame): Dataframe containing the AC output of the PV system
+        DataFrame containing hourly AC output values normalized to 1 MW-DC capacity
 
     Raises:
-    - ValueError: If an invalid system_type is provided
+        ValueError: If system_type is not 'fixed-tilt' or 'single-axis'
     """
     start_time = time.time()
     logger.info(f"Starting solar AC calculation for {latitude}, {longitude} with {system_type} system")
 
-    # Create the appropriate mount and array based on system type
+    # Create mount based on system type
     mount_start = time.time()
     if system_type.lower() == 'fixed-tilt':
-        mount = pvsystem.FixedMount(
-            surface_tilt=surface_tilt,
-            surface_azimuth=surface_azimuth
-        )
+        mount = pvsystem.FixedMount(surface_tilt=surface_tilt, surface_azimuth=surface_azimuth)
     elif system_type.lower() == 'single-axis':
         mount = pvsystem.SingleAxisTrackerMount()
     else:
-        raise ValueError("System_type must be either 'fixed-tilt' or 'single-axis'")
+        raise ValueError("system_type must be either 'fixed-tilt' or 'single-axis'")
     logger.info(f"Mount creation took {(time.time() - mount_start)*1000:.1f} ms")
 
-    # Create array and location
+    # Create array and location objects
     array_start = time.time()
-    array = pvsystem.Array(mount, **PVLIB_BASE_PARAMETERS)
-    loc = location.Location(latitude, longitude)
+    array = pvsystem.Array(mount, **PVLIB_CONFIG)
+    site = location.Location(latitude, longitude)
     logger.info(f"Array and location creation took {(time.time() - array_start)*1000:.1f} ms")
 
-    # Define the PV system
+    # Create PV system with normalized 1 MW rating
     system_start = time.time()
-    system = pvsystem.PVSystem(
+    pv_system = pvsystem.PVSystem(
         arrays=[array],
-        inverter_parameters=dict(pdc0=PDC0)  # Normalized inverter rating
+        inverter_parameters={'pdc0': PVLIB_CONFIG['module_parameters']['pdc0']}
     )
     logger.info(f"PV system creation took {(time.time() - system_start)*1000:.1f} ms")
 
-    # Create the model chain
+    # Configure model chain with physical AOI model
     chain_start = time.time()
-    mc = modelchain.ModelChain(
-        system,
-        loc,
-        aoi_model='physical',  # Use physical model for angle of incidence
-        spectral_model='no_loss'  # Ignore spectral losses for simplicity
+    model = modelchain.ModelChain(
+        pv_system,
+        site,
+        aoi_model='physical',
+        spectral_model='no_loss'
     )
     logger.info(f"Model chain creation took {(time.time() - chain_start)*1000:.1f} ms")
 
-    # Fetch weather data
+    # Fetch and process weather data
     weather_start = time.time()
-    weather = iotools.get_pvgis_tmy(latitude, longitude)[0]
+    weather_data = iotools.get_pvgis_tmy(latitude, longitude)[0]
     logger.info(f"Weather data fetch took {(time.time() - weather_start)*1000:.1f} ms")
 
-    # Run the model
+    # Run performance model
     model_start = time.time()
-    mc.run_model(weather)
+    model.run_model(weather_data)
     logger.info(f"Model run took {(time.time() - model_start)*1000:.1f} ms")
 
     total_time = time.time() - start_time
     logger.info(f"Total solar AC calculation took {total_time*1000:.1f} ms")
 
-    return mc.results.ac
+    return model.results.ac
 
-
-def simulate_battery_operation(df, battery_capacity_mwh, initial_battery_charge, generator_capacity, load, op_year):
+def simulate_battery_operation(df: pd.DataFrame, battery_capacity_mwh: float, 
+                             initial_battery_charge: float, generator_capacity: float, 
+                             load: float, operating_year: int) -> pd.DataFrame:
     """
-    Simulate the charging/discharging of the battery, calculate system performance.
+    Simulate battery, solar and generator operation for one year of system lifetime.
+
+    Models the charging and discharging of the battery storage system and generator
+    operation to meet the datacenter load, accounting for battery efficiency,
+    degradation, and power limits.
+
+    Args:
+        df: DataFrame containing solar generation profile
+        battery_capacity_mwh: Nameplate battery energy capacity in MWh
+        initial_battery_charge: Initial battery state of charge in MWh
+        generator_capacity: Generator power capacity in MW
+        load: Constant load power in MW
+        operating_year: Current year of operation (for degradation)
+
+    Returns:
+        DataFrame with added columns for battery state, energy flows, and generator output
     """
-    battery_max_rate = battery_capacity_mwh / BATT_DURATION_HOURS
-    battery_capacity_mwh = battery_capacity_mwh * (1 - BATT_DEGRADATION_PER_YEAR * (op_year - 1))
-    battery_storage = initial_battery_charge
-    curtailed_solar = []
-    unmet_load = []
-    battery_storage_list = []
-    battery_charge_list = []
-    battery_discharge_list = []
-    generator_output_list = []
+    # Calculate battery parameters with degradation
+    battery_power_mw = battery_capacity_mwh / BATTERY_DURATION_HOURS
+    degraded_capacity_mwh = battery_capacity_mwh * (1 - BATTERY_DEGRADATION_PCT_PER_YEAR * (operating_year - 1))
+    battery_state_mwh = initial_battery_charge
 
-    # Loop through the dataset and simulate battery operation
-    # This has to be a loop, not vectorised, because the battery state at each step depends on the past
-    for i, row in df.iterrows():
-        scaled_gen = row['scaled_solar_generation_mw']
+    # Initialize result lists
+    curtailed_solar_mwh = []
+    unmet_load_mwh = []
+    battery_state_history = []
+    battery_charge_mwh = []
+    battery_discharge_mwh = []
+    generator_output_mwh = []
 
-        # Calculate excess power and deficit
-        if scaled_gen > load:
-            excess_power = scaled_gen - load
-            available_storage = battery_capacity_mwh - battery_storage
-            stored_energy = min(min(excess_power, battery_max_rate), available_storage)
-            curtailed = excess_power - stored_energy
-            battery_storage += stored_energy * BATT_ROUND_TRIP_EFFICIENCY ** 0.5
-            unmet = 0
-            discharge = 0
-            generator_output = 0
+    # Simulate each timestep
+    for _, timestep in df.iterrows():
+        solar_generation_mw = timestep['scaled_solar_generation_mw']
+
+        if solar_generation_mw > load:
+            # Excess solar case
+            excess_power_mw = solar_generation_mw - load
+            available_storage_mwh = degraded_capacity_mwh - battery_state_mwh
+            stored_energy_mwh = min(min(excess_power_mw, battery_power_mw), available_storage_mwh)
+            curtailed_power_mwh = excess_power_mw - stored_energy_mwh
+            battery_state_mwh += stored_energy_mwh * BATTERY_ROUND_TRIP_EFFICIENCY ** 0.5
+            
+            # Record results for excess case
+            curtailed_solar_mwh.append(curtailed_power_mwh)
+            unmet_load_mwh.append(0.0)
+            battery_state_history.append(battery_state_mwh)
+            battery_charge_mwh.append(stored_energy_mwh)
+            battery_discharge_mwh.append(0.0)
+            generator_output_mwh.append(0.0)
         else:
-            deficit = load - scaled_gen
-            withdrawal = min(battery_max_rate, min(deficit / BATT_ROUND_TRIP_EFFICIENCY ** 0.5, battery_storage))
-            battery_storage -= withdrawal
-            discharge = withdrawal * BATT_ROUND_TRIP_EFFICIENCY ** 0.5
-            deficit = deficit - discharge
-            generator_output = min(deficit, generator_capacity)
-            unmet = deficit - generator_output
-            stored_energy = 0
-            curtailed = 0
+            # Power deficit case
+            deficit_mw = load - solar_generation_mw
+            max_discharge_mwh = min(
+                battery_power_mw,
+                min(deficit_mw / BATTERY_ROUND_TRIP_EFFICIENCY ** 0.5, battery_state_mwh)
+            )
+            battery_state_mwh -= max_discharge_mwh
+            discharge_power_mw = max_discharge_mwh * BATTERY_ROUND_TRIP_EFFICIENCY ** 0.5
+            remaining_deficit_mw = deficit_mw - discharge_power_mw
+            generator_power_mw = min(remaining_deficit_mw, generator_capacity)
+            unmet_power_mw = remaining_deficit_mw - generator_power_mw
+            
+            # Record results for deficit case
+            curtailed_solar_mwh.append(0.0)
+            unmet_load_mwh.append(unmet_power_mw)
+            battery_state_history.append(battery_state_mwh)
+            battery_charge_mwh.append(0.0)
+            battery_discharge_mwh.append(discharge_power_mw)
+            generator_output_mwh.append(generator_power_mw)
 
-        # Record the results
-        curtailed_solar.append(curtailed)
-        unmet_load.append(unmet)
-        battery_storage_list.append(battery_storage)
-        battery_charge_list.append(stored_energy)
-        battery_discharge_list.append(discharge)
-        generator_output_list.append(generator_output)
-
-    # Add columns to dataframe
-    df['battery_storage'] = battery_storage_list
-    df['battery_charge'] = battery_charge_list
-    df['battery_discharge'] = battery_discharge_list
-    df['curtailed_solar_mwh'] = curtailed_solar
-    df['generator_output_mwh'] = generator_output_list
-    df['unmet_load'] = unmet_load
-    df['load_unmet'] = df['unmet_load'] > 0
+    # Add results to DataFrame
+    df['battery_state_mwh'] = battery_state_history
+    df['battery_charge_mwh'] = battery_charge_mwh
+    df['battery_discharge_mwh'] = battery_discharge_mwh
+    df['curtailed_solar_mwh'] = curtailed_solar_mwh
+    df['generator_output_mwh'] = generator_output_mwh
+    df['unmet_load_mwh'] = unmet_load_mwh
+    df['load_unmet'] = df['unmet_load_mwh'] > 0
     
     return df
 
-def scale_solar_generation(df, installed_capacity, op_year):
+def scale_solar_generation(df: pd.DataFrame, installed_capacity_mw: float, operating_year: int) -> pd.DataFrame:
     """
-    Scale the solar generation in each year based on degradation.
-    """
-    df['scaled_solar_generation_mw'] = df['p_mp'] * (installed_capacity / DC_AC_RATIO) * (1 - SOLAR_DEGRADATION_PER_YEAR * (op_year - 1))
-    return df
+    Scale the normalized solar generation profile by installed capacity and degradation.
 
-def simulate_system(latitude: float, longitude: float, solar_capacity: float, battery_power: float, generator_capacity: float):
-    """
-    Simulate the system for a single configuration over its lifetime.
-
-    Parameters:
-    - latitude (float): Latitude of the location.
-    - longitude (float): Longitude of the location.
-    - solar_capacity (float): Solar capacity in MW-DC
-    - battery_power (float): Battery power capacity in MW.
-    - generator_capacity (float): Generator capacity in MW.
+    Args:
+        df: DataFrame containing normalized solar generation
+        installed_capacity_mw: Installed solar capacity in MW-DC
+        operating_year: Current year of operation (for degradation)
 
     Returns:
-    - pl.DataFrame: A Polars DataFrame containing the system performance for each year.
+        DataFrame with scaled generation values
     """
-    logger.info(f"Starting simulation for lat={latitude}, lon={longitude}, solar={solar_capacity} MW, "
-                f"battery={battery_power} MW/{battery_power * BATT_DURATION_HOURS} MWh, generator={generator_capacity} MW")
+    degradation_factor = 1 - SOLAR_DEGRADATION_PCT_PER_YEAR * (operating_year - 1)
+    ac_capacity_mw = installed_capacity_mw / DC_AC_RATIO
+    df['scaled_solar_generation_mw'] = df['p_mp'] * ac_capacity_mw * degradation_factor
+    return df
 
-    # Calculate battery energy from power
-    battery_energy = battery_power * BATT_DURATION_HOURS
+def simulate_system(latitude: float, longitude: float, solar_capacity_mw: float, 
+                   battery_power_mw: float, generator_capacity_mw: float) -> pl.DataFrame:
+    """
+    Simulate complete system performance over its lifetime.
 
-    # Get solar AC output data
-    solar_ac_generation_df = (get_solar_ac_dataframe(latitude, longitude, system_type='single-axis')
-                             .reset_index()
-                             .rename(columns={'index': 'time(UTC)', 'value': 'p_mp'}))
-    solar_ac_generation_df['time(UTC)'] = pd.to_datetime(solar_ac_generation_df['time(UTC)'])
+    Performs a year-by-year simulation of the hybrid power system, accounting for
+    solar resource variation, battery operation, and system degradation.
 
-    results = []
-    for op_year in range(1, SYSTEM_LIFETIME_YEARS + 1):
-        logger.info(f"Simulating year {op_year} of {SYSTEM_LIFETIME_YEARS}")
+    Args:
+        latitude: Site latitude in decimal degrees
+        longitude: Site longitude in decimal degrees
+        solar_capacity_mw: Solar PV capacity in MW-DC
+        battery_power_mw: Battery power capacity in MW
+        generator_capacity_mw: Generator capacity in MW
 
-        # Scale solar generation for the current year to account for degradation
-        scaled_df = scale_solar_generation(solar_ac_generation_df.copy(), solar_capacity, op_year)
+    Returns:
+        Polars DataFrame containing annual performance metrics for the system
+    """
+    logger.info(
+        f"Starting simulation for lat={latitude}, lon={longitude}, "
+        f"solar={solar_capacity_mw} MW, battery={battery_power_mw} MW/"
+        f"{battery_power_mw * BATTERY_DURATION_HOURS} MWh, generator={generator_capacity_mw} MW"
+    )
 
-        # Set initial battery charge (0 in the final year, otherwise full capacity)
-        initial_battery_charge = 0 if op_year == SYSTEM_LIFETIME_YEARS else battery_energy
+    # Calculate battery energy capacity
+    battery_capacity_mwh = battery_power_mw * BATTERY_DURATION_HOURS
 
-        # Simulate battery operation
-        result_df = simulate_battery_operation(scaled_df, battery_energy, initial_battery_charge, generator_capacity, DATA_CENTER_LOAD_MW, op_year)
+    # Get normalized solar generation profile
+    solar_generation_df = (get_solar_ac_dataframe(latitude, longitude, system_type='single-axis')
+                          .reset_index()
+                          .rename(columns={'index': 'time(UTC)', 'value': 'p_mp'}))
+    solar_generation_df['time(UTC)'] = pd.to_datetime(solar_generation_df['time(UTC)'])
 
-        # Calculate annual energy metrics (all in MWh)
-        # annual_metrics = {
-        #     'total_load_mwh': DATA_CENTER_LOAD_MW * 8760,  # Constant load × hours in year
-        #     'unmet_load': result_df['unmet_load'].sum(),
-        #     'raw_solar_mwh': result_df['scaled_solar_generation_mw'].sum(),
-        #     'battery_charge': result_df['battery_charge'].sum(),
-        #     'battery_discharge': result_df['battery_discharge'].sum(),
-        #     'generator_output_mwh': result_df['generator_output_mwh'].sum(),
-        #     'curtailed_solar_mwh': result_df['curtailed_solar_mwh'].sum()
-        # }
+    annual_results = []
+    for operating_year in range(1, SYSTEM_LIFETIME_YEARS + 1):
+        logger.info(f"Simulating year {operating_year} of {SYSTEM_LIFETIME_YEARS}")
 
-        # Calculate performance metrics
-        # performance = (annual_metrics['total_load_mwh'] - annual_metrics['unmet_load']) * 100 / annual_metrics['total_load_mwh']
-        # curtailment_share = (annual_metrics['curtailed_solar_mwh'] * 100 / annual_metrics['raw_solar_mwh']) if annual_metrics['raw_solar_mwh'] > 0 else 0
-        # generator_share = annual_metrics['generator_output_mwh'] * 100 / annual_metrics['total_load_mwh']
+        # Scale solar generation for current year
+        scaled_df = scale_solar_generation(solar_generation_df.copy(), solar_capacity_mw, operating_year)
+
+        # Set initial battery charge (empty in final year)
+        initial_charge = 0 if operating_year == 0 else battery_capacity_mwh
+
+        # Simulate battery and generator operation
+        result_df = simulate_battery_operation(
+            scaled_df, battery_capacity_mwh, initial_charge,
+            generator_capacity_mw, DATACENTER_DEMAND_MW, operating_year
+        )
 
         solar_mwh_raw_tot = result_df['scaled_solar_generation_mw'].sum()
         solar_mwh_curtailed_tot = result_df['curtailed_solar_mwh'].sum()
         # Append results for the current year
-        results.append({
-            'system_spec': f"{int(solar_capacity)}MW | {int(battery_power)}MW | {int(generator_capacity)}MW",
-            'operating_year': op_year,
+        annual_results.append({
+            'system_spec': f"{int(solar_capacity_mw)}MW | {int(battery_power_mw)}MW | {int(generator_capacity_mw)}MW",
+            'operating_year': operating_year,
             'Solar Output - Raw (MWh)': round(solar_mwh_raw_tot),
             'Solar Output - Curtailed (MWh)': round(solar_mwh_curtailed_tot),
             'Solar Output - Net (MWh)': round(solar_mwh_raw_tot - solar_mwh_curtailed_tot),
-            'BESS charged (MWh)': round(result_df['battery_charge'].sum()),
-            'BESS discharged (MWh)': round(result_df['battery_discharge'].sum()),
+            'BESS charged (MWh)': round(result_df['battery_charge_mwh'].sum()),
+            'BESS discharged (MWh)': round(result_df['battery_discharge_mwh'].sum()),
             'Generator Output (MWh)': round(result_df['generator_output_mwh'].sum()),
-            'Generator Fuel Input (MMBtu)': round(result_df['generator_output_mwh'].sum() * GENERATOR_HEATRATE / 1000),
+            'Generator Fuel Input (MMBtu)': round(result_df['generator_output_mwh'].sum() * GENERATOR_HEAT_RATE_BTU_PER_KWH / 1000),
             # This method of calculating load served produces sliiightly different results to the original,
             # but I think this may be more correct.
-            'Load Served (MWh)': round(DATA_CENTER_LOAD_MW * 8760 - result_df['unmet_load'].sum())
+            'Load Served (MWh)': round(DATACENTER_DEMAND_MW * 8760 - result_df['unmet_load_mwh'].sum())
         })
 
-    # Convert results to a Polars DataFrame
-    results_df = pl.DataFrame(results)
+    results_df = pl.DataFrame(annual_results)
     logger.info("Simulation completed successfully")
     return results_df
 
-# Example usage
 if __name__ == "__main__":
-    latitude = 31.9  # El Paso, TX
-    longitude = -106.2
-    solar_capacity = 250  # MW-dc
-    battery_power = 50  # MW
-    generator_capacity = 0  # MW
+    # Example simulation for El Paso, TX
+    EXAMPLE_CONFIG = {
+        'latitude': 31.9,
+        'longitude': -106.2,
+        'solar_capacity_mw': 500,
+        'battery_power_mw': 100,
+        'generator_capacity_mw': 100
+    }
 
-    results = simulate_system(latitude, longitude, solar_capacity, battery_power, generator_capacity)
+    results = simulate_system(**EXAMPLE_CONFIG)
     results.write_csv('output_20_yrs.csv')
     print(results)
 
