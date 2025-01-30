@@ -208,7 +208,7 @@ def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float,
     ])
     fig.update_layout(
         title='System Capacity Overview',
-        height=300,
+        height=270,
         showlegend=False,
         margin=dict(t=30, b=0, l=0, r=0)
     )

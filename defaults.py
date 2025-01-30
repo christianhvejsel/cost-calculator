@@ -37,6 +37,8 @@ DEFAULTS_GENERATORS = {
     }
 }
 
+DEFAULTS_DATACENTER_LOAD = [50, 100, 200, 500, 1000]
+
 # Solar PV CAPEX defaults ($/W)
 DEFAULTS_SOLAR_CAPEX = {
     'modules': 0.220,

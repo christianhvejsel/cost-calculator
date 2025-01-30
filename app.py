@@ -36,12 +36,12 @@ def display_energy_mix(energy_mix: Dict[str, float]) -> None:
 
 def main():
     """Main application."""
-    st.set_page_config(layout="wide", page_title="LCOE Calculator")
+    st.set_page_config(layout="wide", page_title="Solar Data Center LCOE Calculator")
     
     unique_values = get_unique_values()
     
     # Create input sections
-    inputs = create_input_sections(unique_values)
+    inputs = create_input_sections()
     
     # Calculate CAPEX subtotals for each system component
     capex_subtotals = calculate_capex_subtotals(inputs)
@@ -65,7 +65,6 @@ def main():
     try:
         # Create DataCenter instance (this will also load and filter simulation data)
         data_center = DataCenter(
-            location=inputs['location'],
             solar_pv_capacity_mw=inputs['solar_pv_capacity_mw'],
             bess_max_power_mw=inputs['bess_max_power_mw'],
             generator_capacity_mw=inputs['generator_capacity_mw'],

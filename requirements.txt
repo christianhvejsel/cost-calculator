@@ -6,3 +6,4 @@ polars==1.21.0
 pvlib==0.11.2
 streamlit_folium
 folium
+reverse_geocoder

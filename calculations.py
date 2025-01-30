@@ -54,7 +54,6 @@ class DataCenter:
     """Represents an off-grid datacenter energy system with solar, BESS, and generator."""
     
     # Required configuration inputs
-    location: str
     solar_pv_capacity_mw: int
     bess_max_power_mw: int
     generator_capacity_mw: int
@@ -95,6 +94,7 @@ class DataCenter:
     # Optional: simulation data can be passed in if already loaded
     full_simulation_data: pd.DataFrame = None
     filtered_simulation_data: pd.DataFrame = None
+    location: str = None
     
     def __post_init__(self):
         if self.full_simulation_data is None:
