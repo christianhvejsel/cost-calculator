@@ -3,6 +3,8 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict
+from streamlit_folium import folium_static, st_folium
+import folium
 
 from st_output_components import create_capacity_chart
 from defaults import (
@@ -11,6 +13,11 @@ from defaults import (
     DEFAULTS_SOFT_COSTS_CAPEX, DEFAULTS_OM, DEFAULTS_FINANCIAL,
     DEFAULTS_DEPRECIATION_SCHEDULE
 )
+
+
+MAP_INITIAL_LAT = 51.5074
+MAP_INITIAL_LONG = -0.1278
+
 
 def calculate_capex_subtotals(inputs: Dict) -> Dict[str, Dict[str, float]]:
     """Calculate CAPEX subtotals for each system component.
@@ -107,6 +114,36 @@ def calculate_capex_subtotals(inputs: Dict) -> Dict[str, Dict[str, float]]:
 def create_input_sections(unique_values) -> Dict:
     """Create all input sections in the Streamlit app."""
     st.title("Solar Datacenter LCOE Calculator", anchor=False)
+
+    preset_location_tab, custom_location_tab = st.tabs(['Preset locations', 'Custom location'])
+
+    with preset_location_tab:
+        location = st.selectbox("Location", options=unique_values['locations'])
+
+    with custom_location_tab:
+        if "custom_lat_long" not in st.session_state:
+            st.session_state.custom_lat_long = None
+        
+        if st.session_state.custom_lat_long is None:
+            st.write("Click on the map to build your datacenter 🏗️")
+        
+        # Create a Folium map centered on default coordinates
+        m = folium.Map(location=[MAP_INITIAL_LAT, MAP_INITIAL_LONG], zoom_start=3, tiles="CartoDB Positron")
+
+        # Add a click handler to the map
+        m.add_child(folium.LatLngPopup())
+
+        # Display the map and capture user clicks
+        map_data = st_folium(m, width=700, height=500, key="map")
+
+        # Check if the user has clicked on the map
+        if map_data.get("last_clicked"):
+            # Get the latitude and longitude of the clicked point
+            custom_lat = map_data["last_clicked"]["lat"]
+            custom_long = map_data["last_clicked"]["lng"]
+            
+            # Store the coordinates in session state
+            st.session_state.custom_lat_long = (custom_lat, custom_long)
     
     # System Capacity Inputs
     col1, col2, col3, col4 = st.columns(4)
@@ -141,7 +178,8 @@ def create_input_sections(unique_values) -> Dict:
     # Non-megawatt configuration inputs
     col1, col2 = st.columns(2)
     with col1:
-        location = st.selectbox("Location", options=unique_values['locations'])
+        # location = st.selectbox("Location", options=unique_values['locations'])
+        st.write("placeholder")
     with col2:
         generator_type = st.selectbox("Generator Type", ["Gas Engine", "Gas Turbine"], index=0)
     
@@ -295,6 +333,7 @@ def create_input_sections(unique_values) -> Dict:
 
     return {
         'location': location,
+        'custom_lat_long': st.session_state.custom_lat_long,
         'datacenter_load_mw': datacenter_load,
         'solar_pv_capacity_mw': solar_pv_capacity,
         'bess_max_power_mw': bess_max_power,

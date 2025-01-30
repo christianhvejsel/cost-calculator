@@ -6,6 +6,7 @@ import time
 
 from data_loader import get_unique_values
 from calculations import DataCenter
+from powerflow_model import simulate_system
 from st_output_components import (
     format_proforma, display_proforma, create_capex_chart,
     create_energy_mix_chart, create_capacity_chart
@@ -46,7 +47,21 @@ def main():
     capex_subtotals = calculate_capex_subtotals(inputs)
     
     display_capex_breakdown(capex_subtotals)
-    
+
+    # If we need to do a custom run of the powerflow model
+    if inputs['custom_lat_long'] is not None:
+        st.write("Running powerflow model...")
+        powerflow_results = simulate_system(
+            inputs['custom_lat_long'][0],
+            inputs['custom_lat_long'][1],
+            inputs['solar_pv_capacity_mw'],
+            inputs['bess_max_power_mw'],
+            inputs['generator_capacity_mw'],
+            inputs['datacenter_load_mw'],
+        )
+    else:
+        powerflow_results = None
+
     try:
         # Create DataCenter instance (this will also load and filter simulation data)
         data_center = DataCenter(
@@ -75,7 +90,8 @@ def main():
             cost_of_equity_pct=inputs['cost_of_equity_pct'],
             combined_tax_rate_pct=inputs['combined_tax_rate_pct'],
             investment_tax_credit_pct=inputs['investment_tax_credit_pct'],
-            depreciation_schedule=inputs['depreciation_schedule']
+            depreciation_schedule=inputs['depreciation_schedule'],
+            filtered_simulation_data=powerflow_results
         )
     except ValueError as e:
         st.error(str(e))

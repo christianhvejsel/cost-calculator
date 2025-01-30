@@ -13,8 +13,8 @@ def load_simulation_data(file_path: str) -> pd.DataFrame:
         'Generator Capacity (MW-AC)',
         'Solar Output - Raw (MWh)',
         'Solar Output - Net (MWh)',
-        'BESS Throughput (MWh)',
-        'BESS Net Output (MWh)',
+        'BESS charged (MWh)',
+        'BESS discharged (MWh)',
         'Generator Output (MWh)',
         # 'Generator Fuel Input (MMBtu)',
         'Load Served (MWh)'

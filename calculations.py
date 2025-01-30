@@ -29,8 +29,8 @@ LCOE_OPT_MAX_ITERATIONS = 10000
 # Columns to read in from powerflow model
 POWERFLOW_COLUMNS_TO_ASSIGN = [
     'Solar Output - Net (MWh)',  # After inverter losses & curtailment
-    'BESS Throughput (MWh)',  # Amount that the BESS is charged by the solar PV
-    'BESS Net Output (MWh)',  # Amount that the BESS is discharged to the load
+    'BESS charged (MWh)',  # Amount that the BESS is charged by the solar PV
+    'BESS discharged (MWh)',  # Amount that the BESS is discharged to the load
     'Generator Output (MWh)',
     'Load Served (MWh)'
 ]
@@ -44,7 +44,7 @@ EXCLUDE_FROM_NPV = [
 
 # Columns to calculate lifetime totals for
 CALCULATE_TOTALS = [
-    'Solar Output - Net (MWh)', 'BESS Net Output (MWh)', 'Generator Output (MWh)',
+    'Solar Output - Net (MWh)', 'BESS discharged (MWh)', 'Generator Output (MWh)',
     'Generator Fuel Input (MMBtu)', 'Load Served (MWh)'
 ]
 
@@ -93,24 +93,26 @@ class DataCenter:
     construction_time_years: int = DEFAULTS_FINANCIAL['construction_time_years']
 
     # Optional: simulation data can be passed in if already loaded
-    simulation_data: pd.DataFrame = None
+    full_simulation_data: pd.DataFrame = None
+    filtered_simulation_data: pd.DataFrame = None
     
     def __post_init__(self):
-        if self.simulation_data is None:
-            self.simulation_data = load_simulation_data(SIMULATION_DATA_PATH)
+        if self.full_simulation_data is None:
+            self.full_simulation_data = load_simulation_data(SIMULATION_DATA_PATH)
 
-        self._filter_simulation_data()
+        if self.filtered_simulation_data is None:
+            self._filter_simulation_data()
     
     def _filter_simulation_data(self) -> None:
         """Filter simulation data based on configuration."""
         # Create system spec string and extract relevant case
         system_spec = f"{int(self.solar_pv_capacity_mw)}MW | {int(self.bess_max_power_mw)}MW | {int(self.generator_capacity_mw)}MW"
-        self.filtered_data = self.simulation_data[
-            (self.simulation_data['Location'].str.strip() == self.location.strip()) &
-            (self.simulation_data['System Spec'] == system_spec)
+        self.filtered_simulation_data = self.full_simulation_data[
+            (self.full_simulation_data['Location'].str.strip() == self.location.strip()) &
+            (self.full_simulation_data['System Spec'] == system_spec)
         ]
         
-        if self.filtered_data.empty:
+        if self.filtered_simulation_data.empty:
             raise ValueError(
                 f"No matching simulation data found for configuration:\n"
                 f"Location: {self.location}\n"
@@ -124,8 +126,8 @@ class DataCenter:
         proforma.index.name = 'Year'
         
         # Populate operating years with powerflow model outputs
-        for year in self.filtered_data['Operating Year'].unique():
-            year_data = self.filtered_data[self.filtered_data['Operating Year'] == year].iloc[0]
+        for year in self.filtered_simulation_data['Operating Year'].unique():
+            year_data = self.filtered_simulation_data[self.filtered_simulation_data['Operating Year'] == year].iloc[0]
             proforma.loc[year, 'Operating Year'] = year
             for column in POWERFLOW_COLUMNS_TO_ASSIGN:
                 proforma.loc[year, column] = year_data[column]
@@ -315,10 +317,10 @@ class DataCenter:
 
     def calculate_energy_mix(self) -> Dict[str, float]:
         """Calculate lifetime energy mix from simulation data."""
-        filtered_data = self.filtered_data
+        filtered_data = self.filtered_simulation_data
         solar_gen_net_twh = filtered_data['Solar Output - Net (MWh)'].sum() / 1_000_000
-        solar_to_bess_twh = filtered_data['BESS Throughput (MWh)'].sum() / 1_000_000
-        bess_to_load_twh = filtered_data['BESS Net Output (MWh)'].sum() / 1_000_000
+        solar_to_bess_twh = filtered_data['BESS charged (MWh)'].sum() / 1_000_000
+        bess_to_load_twh = filtered_data['BESS discharged (MWh)'].sum() / 1_000_000
         generator_twh = filtered_data['Generator Output (MWh)'].sum() / 1_000_000
         total_load_twh = filtered_data['Load Served (MWh)'].sum() / 1_000_000
         
