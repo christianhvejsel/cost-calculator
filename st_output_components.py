@@ -113,10 +113,10 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
     ])
 
     fig.update_layout(
-        title=dict(
-            text='Breakdown',
-            y=0.95  # Move title down slightly
-        ),
+        # title=dict(
+        #     text='Breakdown',
+        #     # y=0.95  # Move title down slightly
+        # ),
         xaxis_title='CAPEX Cost ($ Millions)',
         barmode='stack',
         height=150,
@@ -176,20 +176,20 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
     ])
 
     fig.update_layout(
-        title='Lifetime Energy to Load',
-        xaxis_title='Energy (TWh)',
+        title='Lifetime Energy to Load (TWh)',
+        # xaxis_title='Energy (TWh)',
         barmode='stack',
-        height=150,
+        height=175,
         showlegend=True,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            yanchor="top",
+            y=-0.6,  # Position below x-axis
             xanchor="center",
             x=0.5,
             traceorder="normal"
         ),
-        margin=dict(t=50, b=30, l=0, r=0),  # Adjusted top and bottom margins
+        margin=dict(t=50, b=80, l=0, r=0),  # Increased bottom margin to accommodate legend
         yaxis=dict(showticklabels=False)  # Hide y-axis labels
     )
     
@@ -213,6 +213,63 @@ def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float,
         margin=dict(t=30, b=0, l=0, r=0)
     )
     return fig
+
+def display_daily_sample_chart(daily_sample: pd.DataFrame) -> None:
+    """Display a daily sample chart showing solar generation over time."""
+    fig = go.Figure(data=[
+        go.Scatter(
+            x=daily_sample.index,
+            y=daily_sample['scaled_solar_generation_mw'],
+            mode='lines',
+            name='Solar Generation (AC)',
+            line=dict(color=SOLAR_COLOR, width=2),
+            hovertemplate='%{y:.1f} MW<extra></extra>'
+        ),
+        go.Scatter(
+            x=daily_sample.index,
+            y=daily_sample['battery_discharge_mwh'] - daily_sample['battery_charge_mwh'],
+            mode='lines',
+            name='Battery',
+            line=dict(color=BESS_COLOR, width=2),
+            hovertemplate='%{y:.1f} MW<extra></extra>'
+        ),
+        go.Scatter(
+            x=daily_sample.index,
+            y=daily_sample['generator_output_mwh'],
+            mode='lines',
+            name='Generator Output',
+            line=dict(color=GENERATOR_COLOR, width=2),
+            hovertemplate='%{y:.1f} MW<extra></extra>'
+        ),
+        go.Scatter(
+            x=daily_sample.index,
+            y=daily_sample['load_served_mwh'],
+            mode='lines',
+            name='Data Center Load',
+            line=dict(color=DATACENTER_COLOR, width=2),
+            hovertemplate='%{y:.1f} MW<extra></extra>'
+        )
+    ])
+    
+    fig.update_layout(
+        # title='Power flow, sample week',
+        height=360,
+        margin=dict(t=30, b=50, l=0, r=0),  # Bottom margin for legend
+        xaxis_title='Hours',
+        yaxis_title='Power (MW)',
+        legend=dict(
+            orientation="h",  # Horizontal orientation
+            yanchor="top",
+            y=1.02,  # Move above the plot
+            xanchor="center",
+            x=0.5,  # Center horizontally
+            font=dict(size=11),
+            traceorder="normal"
+        ),
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
     """Format proforma with years as columns and metrics as rows."""
@@ -381,5 +438,5 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
         },
         hide_index=True,
         use_container_width=True,
-        height=1000
+        height=1200
     ) 

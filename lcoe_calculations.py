@@ -314,24 +314,3 @@ class DataCenter:
                 
         # If we hit max iterations, return current best estimate
         return lcoe_guess, proforma
-
-    def calculate_energy_mix(self) -> Dict[str, float]:
-        """Calculate lifetime energy mix from simulation data."""
-        filtered_data = self.filtered_simulation_data
-        solar_gen_net_twh = filtered_data['Solar Output - Net (MWh)'].sum() / 1_000_000
-        solar_to_bess_twh = filtered_data['BESS charged (MWh)'].sum() / 1_000_000
-        bess_to_load_twh = filtered_data['BESS discharged (MWh)'].sum() / 1_000_000
-        generator_twh = filtered_data['Generator Output (MWh)'].sum() / 1_000_000
-        total_load_twh = filtered_data['Load Served (MWh)'].sum() / 1_000_000
-        
-        renewable_percentage = 100 * (1 - generator_twh / total_load_twh)
-        
-        return {
-            'solar_gen_net_twh': solar_gen_net_twh,
-            'solar_to_load_twh': solar_gen_net_twh - solar_to_bess_twh,
-            'bess_to_load_twh': bess_to_load_twh,
-            'generator_twh': generator_twh,
-            'total_generation_twh': solar_gen_net_twh + bess_to_load_twh + generator_twh,
-            'total_load_twh': total_load_twh,
-            'renewable_percentage': renewable_percentage
-        }

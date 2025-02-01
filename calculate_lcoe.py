@@ -2,7 +2,7 @@
 """Command line wrapper for LCOE calculation."""
 
 import argparse
-from calculations import DataCenter
+from lcoe_calculations import DataCenter
 
 def parse_args():
     """Parse command line arguments."""

@@ -10,7 +10,8 @@ import pandas as pd
 from pvlib import pvsystem, modelchain, location, iotools
 import logging
 import time
-
+import streamlit as st
+from typing import Dict
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -40,7 +41,7 @@ PVLIB_CONFIG = {
     },
 }
 
-
+@st.cache_data
 def get_solar_ac_dataframe(
     latitude: float,
     longitude: float,
@@ -115,7 +116,7 @@ def simulate_battery_operation(
     battery_capacity_mwh: float,
     initial_battery_charge: float,
     generator_capacity: float,
-    load: float,
+    load_mw: float,
     operating_year: int,
 ) -> pd.DataFrame:
     """
@@ -155,9 +156,9 @@ def simulate_battery_operation(
     for _, timestep in df.iterrows():
         solar_generation_mw = timestep["scaled_solar_generation_mw"]
 
-        if solar_generation_mw > load:
+        if solar_generation_mw > load_mw:
             # Excess solar case
-            excess_power_mw = solar_generation_mw - load
+            excess_power_mw = solar_generation_mw - load_mw
             available_storage_mwh = degraded_capacity_mwh - battery_state_mwh
             stored_energy_mwh = min(
                 min(excess_power_mw, battery_power_mw), available_storage_mwh
@@ -174,7 +175,7 @@ def simulate_battery_operation(
             generator_output_mwh.append(0.0)
         else:
             # Power deficit case
-            deficit_mw = load - solar_generation_mw
+            deficit_mw = load_mw - solar_generation_mw
             max_discharge_mwh = min(
                 battery_power_mw,
                 min(deficit_mw / BATTERY_ROUND_TRIP_EFFICIENCY**0.5, battery_state_mwh),
@@ -200,7 +201,7 @@ def simulate_battery_operation(
     df["curtailed_solar_mwh"] = curtailed_solar_mwh
     df["generator_output_mwh"] = generator_output_mwh
     df["unmet_load_mwh"] = unmet_load_mwh
-    df["load_unmet"] = df["unmet_load_mwh"] > 0
+    df['load_served_mwh'] = load_mw - df['unmet_load_mwh']
 
     return df
 
@@ -224,10 +225,11 @@ def scale_solar_generation(
     df["scaled_solar_generation_mw"] = df["p_mp"] * ac_capacity_mw * degradation_factor
     return df
 
-
+@st.cache_data
 def simulate_system(
     latitude: float,
     longitude: float,
+    solar_ac_dataframe: pd.DataFrame,
     solar_capacity_mw: float,
     battery_power_mw: float,
     generator_capacity_mw: float,
@@ -260,7 +262,7 @@ def simulate_system(
 
     # Get normalized solar generation profile
     solar_generation_df = (
-        get_solar_ac_dataframe(latitude, longitude, system_type="single-axis")
+        solar_ac_dataframe
         .reset_index()
         .rename(columns={"index": "time(UTC)", "value": "p_mp"})
     )
@@ -287,7 +289,10 @@ def simulate_system(
             data_center_demand_mw,
             operating_year,
         )
-
+        if operating_year == 1:
+            # Slice 24h * 7 days of data from the middle of the year
+            sample_week_df = result_df[result_df['time(UTC)'].dt.dayofyear.isin(range(182, 189))]
+            sample_week_df = sample_week_df.reset_index(drop=True)
         solar_mwh_raw_tot = result_df["scaled_solar_generation_mw"].sum()
         solar_mwh_curtailed_tot = result_df["curtailed_solar_mwh"].sum()
         # Append results for the current year
@@ -320,10 +325,31 @@ def simulate_system(
             }
         )
 
-    results_df = pd.DataFrame(annual_results)
-    # results_df = pl.DataFrame(annual_results)
     logger.info("Simulation completed successfully")
-    return results_df
+    return {
+        "annual_results": pd.DataFrame(annual_results),
+        "daily_sample": sample_week_df
+    }
+
+def calculate_energy_mix(simulation_data: pd.DataFrame) -> Dict[str, float]:
+    """Calculate lifetime energy mix from simulation data."""
+    solar_gen_net_twh = simulation_data['Solar Output - Net (MWh)'].sum() / 1_000_000
+    solar_to_bess_twh = simulation_data['BESS charged (MWh)'].sum() / 1_000_000
+    bess_to_load_twh = simulation_data['BESS discharged (MWh)'].sum() / 1_000_000
+    generator_twh = simulation_data['Generator Output (MWh)'].sum() / 1_000_000
+    total_load_twh = simulation_data['Load Served (MWh)'].sum() / 1_000_000
+    
+    renewable_percentage = 100 * (1 - generator_twh / total_load_twh)
+    
+    return {
+        'solar_gen_net_twh': solar_gen_net_twh,
+        'solar_to_load_twh': solar_gen_net_twh - solar_to_bess_twh,
+        'bess_to_load_twh': bess_to_load_twh,
+        'generator_twh': generator_twh,
+        'total_generation_twh': solar_gen_net_twh + bess_to_load_twh + generator_twh,
+        'total_load_twh': total_load_twh,
+        'renewable_percentage': renewable_percentage
+    }
 
 
 if __name__ == "__main__":
@@ -337,6 +363,7 @@ if __name__ == "__main__":
         "data_center_demand_mw": 100
     }
 
-    results = simulate_system(**EXAMPLE_CONFIG)
+    solar_ac_dataframe = get_solar_ac_dataframe(EXAMPLE_CONFIG["latitude"], EXAMPLE_CONFIG["longitude"])
+    results = simulate_system(**EXAMPLE_CONFIG, solar_ac_dataframe=solar_ac_dataframe)
     results.write_csv("output_20_yrs.csv")
     print(results)

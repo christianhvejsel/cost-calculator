@@ -11,12 +11,13 @@ from defaults import (
     DATACENTER_DEMAND_MW, BESS_HRS_STORAGE, DEFAULTS_GENERATORS,
     DEFAULTS_SOLAR_CAPEX, DEFAULTS_BESS_CAPEX, DEFAULTS_SYSTEM_INTEGRATION_CAPEX,
     DEFAULTS_SOFT_COSTS_CAPEX, DEFAULTS_OM, DEFAULTS_FINANCIAL,
-    DEFAULTS_DEPRECIATION_SCHEDULE, DEFAULTS_DATACENTER_LOAD
+    DEFAULTS_DEPRECIATION_SCHEDULE
 )
 import reverse_geocoder as rg
 
-MAP_INITIAL_LAT = 51.5074
-MAP_INITIAL_LONG = -0.1278
+# Amarillo, TX
+MAP_INITIAL_LAT = 35.199
+MAP_INITIAL_LONG = -101.845
 
 
 def calculate_capex_subtotals(inputs: Dict) -> Dict[str, Dict[str, float]]:
@@ -111,7 +112,7 @@ def calculate_capex_subtotals(inputs: Dict) -> Dict[str, Dict[str, float]]:
         }
     }
 
-def create_input_sections() -> Dict:
+def create_system_inputs() -> Dict:
     """Create all input sections in the Streamlit app."""
     # Add custom CSS to reduce top padding
     st.markdown("""
@@ -136,6 +137,7 @@ def create_input_sections() -> Dict:
         unsafe_allow_html=True
     )
 
+    st.subheader("System Configuration")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         datacenter_load = st.number_input(
@@ -169,203 +171,206 @@ def create_input_sections() -> Dict:
             max_value=1000,
             step=10
         )
+        generator_type = st.selectbox("Generator Type", ["Gas Engine", "Gas Turbine"], index=0)
     
     # Display capacity chart
     st.plotly_chart(
         create_capacity_chart(datacenter_load, solar_pv_capacity, bess_max_power, generator_capacity),
         use_container_width=True
     )
+    st.divider()
 
-    map_col, details_col = st.columns([2,2], gap="medium")
-
-    with map_col:
-        st.subheader("Location")
-        if "custom_lat_long" not in st.session_state:
-            st.session_state.custom_lat_long = None
-    
-        st.write("Click on the map to change location")
-
-        # Create a Folium map centered on default coordinates
-        m = folium.Map(location=[MAP_INITIAL_LAT, MAP_INITIAL_LONG], zoom_start=3, tiles="CartoDB Positron")
-
-        # Add a click handler to the map
-        m.add_child(folium.LatLngPopup())
-
-        # Display the map and capture user clicks
-        map_data = st_folium(m, height=370, use_container_width=True, key="map")
-
-        # Check if the user has clicked on the map
-        if map_data.get("last_clicked"):
-            # Get the latitude and longitude of the clicked point
-            custom_lat = map_data["last_clicked"]["lat"]
-            custom_long = map_data["last_clicked"]["lng"]
-            
-            # Store the coordinates in session state
-            rg_result = rg.search((custom_lat, custom_long))[0]
-            st.markdown(
-                f'<p style="margin-top: 0;">Selected ({round(custom_lat, 1)}, {round(custom_long, 1)}) in {rg_result["admin1"]}, {rg_result["cc"]}</p>',
-                unsafe_allow_html=True
-            )
-            st.write("Fetching weather data...")
-
-            st.session_state.custom_lat_long = (custom_lat, custom_long)
-
-    with details_col:
-        st.subheader("Detailed Inputs")
-        generator_type = st.selectbox("Generator Type", ["Gas Engine", "Gas Turbine"], index=0)
-        gen_config = DEFAULTS_GENERATORS[generator_type]
-        # Financial Inputs
-        with st.expander("Financial Inputs"):
-            col1, col2 = st.columns(2)
-            with col1:
-                cost_of_debt = st.number_input("Cost of Debt (%)", value=DEFAULTS_FINANCIAL['cost_of_debt_pct'], min_value=0.0, max_value=100.0)
-                leverage = st.number_input("Leverage (%)", value=DEFAULTS_FINANCIAL['leverage_pct'], min_value=0.0, max_value=100.0)
-                debt_term = st.number_input("Debt Term (years)", value=DEFAULTS_FINANCIAL['debt_term_years'], min_value=1)
-                cost_of_equity = st.number_input("Cost of Equity (%)", value=DEFAULTS_FINANCIAL['cost_of_equity_pct'], min_value=0.0, max_value=100.0)
-                investment_tax_credit_pct = st.number_input("Investment Tax Credit (%)", value=DEFAULTS_FINANCIAL['investment_tax_credit_pct'], min_value=0.0, max_value=100.0)
-                combined_tax_rate = st.number_input("Combined Tax Rate (%)", value=DEFAULTS_FINANCIAL['combined_tax_rate_pct'], min_value=0.0, max_value=100.0)
-            
-            with col2:
-                # Create default MACRS depreciation schedule (20 years)
-                if 'depreciation_schedule' not in st.session_state:
-                    st.session_state.depreciation_schedule = pd.DataFrame({
-                        'Year': range(1, 21),
-                        'Depreciation (%)': DEFAULTS_DEPRECIATION_SCHEDULE
-                    })
-                
-                # Display editable depreciation schedule
-                edited_depreciation = st.data_editor(
-                    st.session_state.depreciation_schedule,
-                    column_config={
-                        "Year": st.column_config.NumberColumn(
-                            "Year",
-                            help="Year of depreciation",
-                            min_value=1,
-                            max_value=20,
-                            step=1,
-                            disabled=True
-                        ),
-                        "Depreciation (%)": st.column_config.NumberColumn(
-                            "Depreciation (%)",
-                            help="Percentage of total CAPEX to depreciate in this year",
-                            min_value=0.0,
-                            max_value=100.0,
-                            step=0.1,
-                            format="%.1f%%"
-                        )
-                    },
-                    hide_index=True,
-                    width=400
-                )
-                
-                # Update session state with edited values
-                st.session_state.depreciation_schedule = edited_depreciation
-        
-        # CAPEX Inputs
-        with st.expander("CAPEX Inputs"):
-            # TODO: make this dynamic
-            # construction_time = st.number_input("Construction Time (years)", value=DEFAULTS_FINANCIAL['construction_time_years'], min_value=1)
-            construction_time = DEFAULTS_FINANCIAL['construction_time_years']
-            
-            # Solar PV
-            st.subheader("Solar PV")
-            col1, col2 = st.columns(2)
-            with col1:
-                pv_modules = st.number_input("Modules ($/W)", value=DEFAULTS_SOLAR_CAPEX['modules'], format="%.3f")
-                pv_inverters = st.number_input("Inverters ($/W)", value=DEFAULTS_SOLAR_CAPEX['inverters'], format="%.3f")
-                pv_racking = st.number_input("Racking and Foundations ($/W)", value=DEFAULTS_SOLAR_CAPEX['racking'], format="%.3f")
-            with col2:
-                pv_balance_system = st.number_input("Balance of System ($/W)", value=DEFAULTS_SOLAR_CAPEX['balance_of_system'], format="%.3f")
-                pv_labor = st.number_input("Labor ($/W)", value=DEFAULTS_SOLAR_CAPEX['labor'], format="%.3f")
-        
-            # BESS
-            st.subheader("Battery Energy Storage System")
-            col1, col2 = st.columns(2)
-            with col1:
-                bess_units = st.number_input("BESS Units ($/kWh)", value=DEFAULTS_BESS_CAPEX['units'], format="%d")
-                bess_balance_of_system = st.number_input("Balance of System ($/kWh)", value=DEFAULTS_BESS_CAPEX['balance_of_system'], format="%d")
-            with col2:
-                bess_labor = st.number_input("Labor ($/kWh)", value=DEFAULTS_BESS_CAPEX['labor'], format="%d")
-
-            # Generators
-            st.subheader("Generators")
-            col1, col2 = st.columns(2)
-            with col1:
-                gensets = st.number_input(
-                    "Gensets ($/kW)", 
-                    value=gen_config['capex']['gensets'],
-                    format="%d"
-                )
-                gen_balance_of_system = st.number_input(
-                    "Balance of System ($/kW)", 
-                    value=gen_config['capex']['balance_of_system'],
-                    format="%d"
-                )
-            with col2:
-                gen_labor = st.number_input(
-                    "Labor ($/kW)", 
-                    value=gen_config['capex']['labor'],
-                    format="%d"
-                )
-
-            # System Integration
-            st.subheader("System Integration")
-            col1, col2 = st.columns(2)
-            with col1:
-                si_microgrid = st.number_input("Microgrid Switchgear, Transformers, etc. ($/kW)", value=DEFAULTS_SYSTEM_INTEGRATION_CAPEX['microgrid'], format="%d")
-                si_controls = st.number_input("Controls ($/kW)", value=DEFAULTS_SYSTEM_INTEGRATION_CAPEX['controls'], format="%d")
-            with col2:
-                si_labor = st.number_input("System Integration Labor ($/kW)", value=DEFAULTS_SYSTEM_INTEGRATION_CAPEX['labor'], format="%d")
-
-            # Soft Costs
-            st.subheader("Soft Costs (CAPEX)")
-            col1, col2 = st.columns(2)
-            with col1:
-                soft_costs_general_conditions = st.number_input("General Conditions (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['general_conditions'], format="%.2f")
-                soft_costs_epc_overhead = st.number_input("EPC Overhead (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['epc_overhead'], format="%.2f")
-                soft_costs_design_engineering = st.number_input("Design, Engineering, and Surveys (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['design_engineering'], format="%.2f")
-            with col2:
-                soft_costs_permitting = st.number_input("Permitting & Inspection (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['permitting'], format="%.2f")
-                soft_costs_startup = st.number_input("Startup & Commissioning (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['startup'], format="%.2f")
-                soft_costs_insurance = st.number_input("Insurance (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['insurance'], format="%.2f")
-                soft_costs_taxes = st.number_input("Taxes (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['taxes'], format="%.2f")
-        
-        # O&M Inputs
-        with st.expander("O&M Inputs"):
-            col1, col2 = st.columns(2)
-            
-            # Column 1: Asset-specific O&M
-            with col1:
-                st.subheader("Operations and Maintenance")
-                fuel_price = st.number_input("Fuel Price ($/MMBtu)", value=DEFAULTS_OM['fuel_price_dollar_per_mmbtu'], format="%.2f")
-                solar_om_fixed = st.number_input("Solar Fixed O&M ($/kW)", value=DEFAULTS_OM['solar_fixed_dollar_per_kw'], format="%d")
-                bess_om_fixed = st.number_input("BESS Fixed O&M ($/kW)", value=DEFAULTS_OM['bess_fixed_dollar_per_kw'], format="%.1f")
-                generator_om_fixed = st.number_input(
-                    "Generator Fixed O&M ($/kW)", 
-                    value=gen_config['opex']['fixed_om'],
-                    format="%.2f"
-                )
-                generator_om_variable = st.number_input(
-                    "Generator Variable O&M ($/kWh)", 
-                    value=gen_config['opex']['variable_om'],
-                    format="%.3f"
-                )
-                bos_om_fixed = st.number_input("Balance of System Fixed O&M ($/kW-load)", value=DEFAULTS_OM['bos_fixed_dollar_per_kw_load'], format="%.1f")
-                soft_om_pct = st.number_input("Soft O&M (% of hard capex)", value=DEFAULTS_OM['soft_pct'], format="%.2f")
-                
-            # Column 2: System-wide O&M and Escalators
-            with col2:
-                st.subheader("Escalators")
-                om_escalator = st.number_input("O&M Escalator (% p.a.)", value=DEFAULTS_OM['escalator_pct'], format="%.2f")
-                fuel_escalator = st.number_input("Fuel Escalator (% p.a.)", value=DEFAULTS_OM['fuel_escalator_pct'], format="%.2f")
 
     return {
-        'custom_lat_long': st.session_state.custom_lat_long,
         'datacenter_load_mw': datacenter_load,
         'solar_pv_capacity_mw': solar_pv_capacity,
         'bess_max_power_mw': bess_max_power,
         'generator_capacity_mw': generator_capacity,
         'generator_type': generator_type,
+    }
+
+def create_map_input() -> Dict:
+    st.subheader("Location")
+
+    if "map_lat_long" not in st.session_state:
+        st.session_state.map_lat_long = [MAP_INITIAL_LAT, MAP_INITIAL_LONG]
+
+    map = folium.Map(location=st.session_state.map_lat_long, zoom_start=3, tiles="CartoDB Positron")
+
+    folium.Marker(location=st.session_state.map_lat_long, draggable=False).add_to(map)
+
+    rendered_map = st_folium(map, height=370, use_container_width=True, key="folium_map")
+
+    # Update marker position immediately after each click
+    if rendered_map.get("last_clicked"):
+        st.session_state.map_lat_long = [rendered_map["last_clicked"]["lat"], rendered_map["last_clicked"]["lng"]]
+
+        # Redraw the map immediately with the new marker location
+        map = folium.Map(location=st.session_state.map_lat_long)
+        folium.Marker(
+            location=st.session_state.map_lat_long,
+            draggable=False
+        ).add_to(map)
+        rendered_map = st_folium(map, width=620, height=580, key="folium_map")
+
+    # Get name of clicked location
+    rg_result = rg.search(st.session_state.map_lat_long)[0]
+    # st.markdown(
+    #     f'<p style="margin-top: -1.8em;">Selected ({round(st.session_state.map_lat_long[0], 1)}, {round(st.session_state.map_lat_long[1], 1)}) in {rg_result["admin1"]}, {rg_result["cc"]}</p>',
+    #     unsafe_allow_html=True
+    # )
+    return (*st.session_state.map_lat_long, f"{rg_result['admin1']}, {rg_result['cc']}")
+
+def create_financial_inputs(generator_type: str) -> Dict:
+    st.subheader("Financial Inputs")
+    # Financial Inputs
+    with st.expander("Capital Structure"):
+        col1, col2 = st.columns(2)
+        with col1:
+            cost_of_debt = st.number_input("Cost of Debt (%)", value=DEFAULTS_FINANCIAL['cost_of_debt_pct'], min_value=0.0, max_value=100.0)
+            leverage = st.number_input("Leverage (%)", value=DEFAULTS_FINANCIAL['leverage_pct'], min_value=0.0, max_value=100.0)
+            debt_term = st.number_input("Debt Term (years)", value=DEFAULTS_FINANCIAL['debt_term_years'], min_value=1)
+            cost_of_equity = st.number_input("Cost of Equity (%)", value=DEFAULTS_FINANCIAL['cost_of_equity_pct'], min_value=0.0, max_value=100.0)
+            investment_tax_credit_pct = st.number_input("Investment Tax Credit (%)", value=DEFAULTS_FINANCIAL['investment_tax_credit_pct'], min_value=0.0, max_value=100.0)
+            combined_tax_rate = st.number_input("Combined Tax Rate (%)", value=DEFAULTS_FINANCIAL['combined_tax_rate_pct'], min_value=0.0, max_value=100.0)
+        
+        with col2:
+            # Create default MACRS depreciation schedule (20 years)
+            if 'depreciation_schedule' not in st.session_state:
+                st.session_state.depreciation_schedule = pd.DataFrame({
+                    'Year': range(1, 21),
+                    'Depreciation (%)': DEFAULTS_DEPRECIATION_SCHEDULE
+                })
+            
+            # Display editable depreciation schedule
+            edited_depreciation = st.data_editor(
+                st.session_state.depreciation_schedule,
+                column_config={
+                    "Year": st.column_config.NumberColumn(
+                        "Year",
+                        help="Year of depreciation",
+                        min_value=1,
+                        max_value=20,
+                        step=1,
+                        disabled=True
+                    ),
+                    "Depreciation (%)": st.column_config.NumberColumn(
+                        "Depreciation (%)",
+                        help="Percentage of total CAPEX to depreciate in this year",
+                        min_value=0.0,
+                        max_value=100.0,
+                        step=0.1,
+                        format="%.1f%%"
+                    )
+                },
+                hide_index=True,
+                width=400
+            )
+            
+            # Update session state with edited values
+            st.session_state.depreciation_schedule = edited_depreciation
+    
+    # CAPEX Inputs
+    with st.expander("CAPEX Costs"):
+        # TODO: make this dynamic
+        # construction_time = st.number_input("Construction Time (years)", value=DEFAULTS_FINANCIAL['construction_time_years'], min_value=1)
+        construction_time = DEFAULTS_FINANCIAL['construction_time_years']
+        
+        # Solar PV
+        st.subheader("Solar PV")
+        col1, col2 = st.columns(2)
+        with col1:
+            pv_modules = st.number_input("Modules ($/W)", value=DEFAULTS_SOLAR_CAPEX['modules'], format="%.3f")
+            pv_inverters = st.number_input("Inverters ($/W)", value=DEFAULTS_SOLAR_CAPEX['inverters'], format="%.3f")
+            pv_racking = st.number_input("Racking and Foundations ($/W)", value=DEFAULTS_SOLAR_CAPEX['racking'], format="%.3f")
+        with col2:
+            pv_balance_system = st.number_input("Balance of System ($/W)", value=DEFAULTS_SOLAR_CAPEX['balance_of_system'], format="%.3f")
+            pv_labor = st.number_input("Labor ($/W)", value=DEFAULTS_SOLAR_CAPEX['labor'], format="%.3f")
+    
+        # BESS
+        st.subheader("Battery Energy Storage System")
+        col1, col2 = st.columns(2)
+        with col1:
+            bess_units = st.number_input("BESS Units ($/kWh)", value=DEFAULTS_BESS_CAPEX['units'], format="%d")
+            bess_balance_of_system = st.number_input("Balance of System ($/kWh)", value=DEFAULTS_BESS_CAPEX['balance_of_system'], format="%d")
+        with col2:
+            bess_labor = st.number_input("Labor ($/kWh)", value=DEFAULTS_BESS_CAPEX['labor'], format="%d")
+
+        # Generators
+        st.subheader("Generators")
+        col1, col2 = st.columns(2)
+        gen_config = DEFAULTS_GENERATORS[generator_type]
+        with col1:
+            gensets = st.number_input(
+                "Gensets ($/kW)", 
+                value=gen_config['capex']['gensets'],
+                format="%d"
+            )
+            gen_balance_of_system = st.number_input(
+                "Balance of System ($/kW)", 
+                value=gen_config['capex']['balance_of_system'],
+                format="%d"
+            )
+        with col2:
+            gen_labor = st.number_input(
+                "Labor ($/kW)", 
+                value=gen_config['capex']['labor'],
+                format="%d"
+            )
+
+        # System Integration
+        st.subheader("System Integration")
+        col1, col2 = st.columns(2)
+        with col1:
+            si_microgrid = st.number_input("Microgrid Switchgear, Transformers, etc. ($/kW)", value=DEFAULTS_SYSTEM_INTEGRATION_CAPEX['microgrid'], format="%d")
+            si_controls = st.number_input("Controls ($/kW)", value=DEFAULTS_SYSTEM_INTEGRATION_CAPEX['controls'], format="%d")
+        with col2:
+            si_labor = st.number_input("System Integration Labor ($/kW)", value=DEFAULTS_SYSTEM_INTEGRATION_CAPEX['labor'], format="%d")
+
+        # Soft Costs
+        st.subheader("Soft Costs (CAPEX)")
+        col1, col2 = st.columns(2)
+        with col1:
+            soft_costs_general_conditions = st.number_input("General Conditions (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['general_conditions'], format="%.2f")
+            soft_costs_epc_overhead = st.number_input("EPC Overhead (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['epc_overhead'], format="%.2f")
+            soft_costs_design_engineering = st.number_input("Design, Engineering, and Surveys (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['design_engineering'], format="%.2f")
+        with col2:
+            soft_costs_permitting = st.number_input("Permitting & Inspection (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['permitting'], format="%.2f")
+            soft_costs_startup = st.number_input("Startup & Commissioning (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['startup'], format="%.2f")
+            soft_costs_insurance = st.number_input("Insurance (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['insurance'], format="%.2f")
+            soft_costs_taxes = st.number_input("Taxes (%)", value=DEFAULTS_SOFT_COSTS_CAPEX['taxes'], format="%.2f")
+    
+    # O&M Inputs
+    with st.expander("O&M Rates"):
+        col1, col2 = st.columns(2)
+        
+        # Column 1: Asset-specific O&M
+        with col1:
+            st.subheader("Operations and Maintenance")
+            fuel_price = st.number_input("Fuel Price ($/MMBtu)", value=DEFAULTS_OM['fuel_price_dollar_per_mmbtu'], format="%.2f")
+            solar_om_fixed = st.number_input("Solar Fixed O&M ($/kW)", value=DEFAULTS_OM['solar_fixed_dollar_per_kw'], format="%d")
+            bess_om_fixed = st.number_input("BESS Fixed O&M ($/kW)", value=DEFAULTS_OM['bess_fixed_dollar_per_kw'], format="%.1f")
+            generator_om_fixed = st.number_input(
+                "Generator Fixed O&M ($/kW)", 
+                value=gen_config['opex']['fixed_om'],
+                format="%.2f"
+            )
+            generator_om_variable = st.number_input(
+                "Generator Variable O&M ($/kWh)", 
+                value=gen_config['opex']['variable_om'],
+                format="%.3f"
+            )
+            bos_om_fixed = st.number_input("Balance of System Fixed O&M ($/kW-load)", value=DEFAULTS_OM['bos_fixed_dollar_per_kw_load'], format="%.1f")
+            soft_om_pct = st.number_input("Soft O&M (% of hard capex)", value=DEFAULTS_OM['soft_pct'], format="%.2f")
+            
+        # Column 2: System-wide O&M and Escalators
+        with col2:
+            st.subheader("Escalators")
+            om_escalator = st.number_input("O&M Escalator (% p.a.)", value=DEFAULTS_OM['escalator_pct'], format="%.2f")
+            fuel_escalator = st.number_input("Fuel Escalator (% p.a.)", value=DEFAULTS_OM['fuel_escalator_pct'], format="%.2f")
+
+    return {
+        'custom_lat_long': st.session_state.map_lat_long,
         'generator_om_fixed_dollar_per_kw': generator_om_fixed,
         'generator_om_variable_dollar_per_kwh': generator_om_variable,
         'fuel_price_dollar_per_mmbtu': fuel_price,

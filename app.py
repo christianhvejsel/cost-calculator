@@ -4,63 +4,92 @@ import streamlit as st
 from typing import Dict
 import time
 
-from data_loader import get_unique_values
-from calculations import DataCenter
-from powerflow_model import simulate_system
+from lcoe_calculations import DataCenter
+from powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
 from st_output_components import (
     format_proforma, display_proforma, create_capex_chart,
-    create_energy_mix_chart, create_capacity_chart
+    create_energy_mix_chart, display_daily_sample_chart
 )
-from st_inputs import create_input_sections, calculate_capex_subtotals
+from st_inputs import create_system_inputs, calculate_capex_subtotals, create_map_input, create_financial_inputs
 
 
 def display_capex_breakdown(capex_subtotals: Dict[str, Dict[str, float]]) -> None:
     """Display CAPEX breakdown with metric and chart side by side."""
     st.subheader("CAPEX Breakdown")
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        total_capex = sum(component['absolute'] for component in capex_subtotals.values())
-        st.metric("Total CAPEX", f"${total_capex:,.1f}M")
-    with col2:
-        absolute_values = {k: v['absolute'] for k, v in capex_subtotals.items()}
-        st.plotly_chart(create_capex_chart(absolute_values, total_capex), use_container_width=True)
+    total_capex = sum(component['absolute'] for component in capex_subtotals.values())
+    st.metric("Total CAPEX", f"${total_capex:,.1f}M")
+    absolute_values = {k: v['absolute'] for k, v in capex_subtotals.items()}
+    st.plotly_chart(create_capex_chart(absolute_values, total_capex), use_container_width=True)
 
 def display_energy_mix(energy_mix: Dict[str, float]) -> None:
     """Display energy mix with metric and chart side by side."""
     st.subheader("Energy Mix")
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        st.metric("Renewable %", f"{energy_mix['renewable_percentage']:.1f}%")
-    with col2:
-        st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
+    # col1, col2 = st.columns([1, 3])
+    # with col1:
+    st.metric("Renewable %", f"{energy_mix['renewable_percentage']:.1f}%")
+    # with col2:
+    st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
 
 def main():
     """Main application."""
     st.set_page_config(layout="wide", page_title="Solar Data Center LCOE Calculator")
     
-    unique_values = get_unique_values()
-    
     # Create input sections
-    inputs = create_input_sections()
-    
-    # Calculate CAPEX subtotals for each system component
-    capex_subtotals = calculate_capex_subtotals(inputs)
-    
-    display_capex_breakdown(capex_subtotals)
+    inputs = create_system_inputs()
 
-    # If we need to do a custom run of the powerflow model
-    if inputs['custom_lat_long'] is not None:
-        st.write("Running powerflow model...")
+    map_col, graph_col = st.columns([2,2], gap="medium")
+
+    with map_col:
+        lat, long, location_name = create_map_input()
+        inputs.update({'lat': lat, 'long': long})
+
+        calc_status_display = st.empty()
+
+        st.session_state.calculation_status = f"Selected ({round(lat, 1)}, {round(long, 1)}) in {location_name}\nFetching weather data..."
+        calc_status_display.code(st.session_state.calculation_status)
+
+        t1 = time.time()
+        solar_ac_dataframe = get_solar_ac_dataframe(lat, long)
+        st.session_state.calculation_status += f"\nWeather data fetched in {time.time()-t1:.2f} seconds"
+        calc_status_display.code(st.session_state.calculation_status)
+
+        st.session_state.calculation_status += "\nSimulating solar and battery power flow..."
+        calc_status_display.code(st.session_state.calculation_status)
+
+        t1 = time.time()
         powerflow_results = simulate_system(
-            inputs['custom_lat_long'][0],
-            inputs['custom_lat_long'][1],
+            inputs['lat'],
+            inputs['long'],
+            solar_ac_dataframe,
             inputs['solar_pv_capacity_mw'],
             inputs['bess_max_power_mw'],
             inputs['generator_capacity_mw'],
             inputs['datacenter_load_mw'],
         )
-    else:
-        powerflow_results = None
+        st.session_state.calculation_status += f"\nPowerflow simulation ran in {time.time()-t1:.2f} seconds"
+        calc_status_display.code(st.session_state.calculation_status)
+        annual_powerflow_results = powerflow_results['annual_results']
+        daily_powerflow_results = powerflow_results['daily_sample']
+
+    with graph_col:
+        st.subheader("Power Flow (sample week)")
+        display_daily_sample_chart(daily_powerflow_results)
+        energy_mix = calculate_energy_mix(annual_powerflow_results)
+        display_energy_mix(energy_mix)
+
+    st.divider()
+
+    financial_col, capex_col = st.columns([2, 2], gap="medium")
+
+    with financial_col:
+        financial_inputs = create_financial_inputs(inputs['generator_type'])
+        inputs.update(financial_inputs)
+
+    with capex_col:
+        # Calculate CAPEX subtotals for each system component
+        capex_subtotals = calculate_capex_subtotals(inputs)
+        display_capex_breakdown(capex_subtotals)
+
 
     try:
         # Create DataCenter instance (this will also load and filter simulation data)
@@ -90,15 +119,12 @@ def main():
             combined_tax_rate_pct=inputs['combined_tax_rate_pct'],
             investment_tax_credit_pct=inputs['investment_tax_credit_pct'],
             depreciation_schedule=inputs['depreciation_schedule'],
-            filtered_simulation_data=powerflow_results
+            filtered_simulation_data=annual_powerflow_results
         )
     except ValueError as e:
         st.error(str(e))
         st.stop()
     
-    # Calculate and display Energy Mix
-    energy_mix = data_center.calculate_energy_mix()
-    display_energy_mix(energy_mix)
 
     # Calculate LCOE
     start_time = time.time()
@@ -106,12 +132,11 @@ def main():
     calculation_time = time.time() - start_time
     
     # Display LCOE  
-    st.subheader("LCOE")
+    st.subheader("Levelized Cost of Electricity")
     st.metric("Calculated LCOE", f"${lcoe:.2f}/MWh")
-    st.text(f"(Ran in {calculation_time*1000:.0f} ms)")
+    # st.text(f"(Ran in {calculation_time*1000:.0f} ms)")
     
-    # Display Proforma
-    st.subheader("Proforma")
+    st.subheader("Capital Breakdown by Year")
     formatted_proforma = format_proforma(pro_forma)
     display_proforma(formatted_proforma)
 
