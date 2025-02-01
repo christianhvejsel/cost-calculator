@@ -42,7 +42,7 @@ PVLIB_CONFIG = {
     },
 }
 
-# @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
 def get_solar_ac_dataframe(
     latitude: float,
     longitude: float,
@@ -211,7 +211,7 @@ def scale_solar_generation(
     df["scaled_solar_generation_mw"] = df["p_mp"] * ac_capacity_mw * degradation_factor
     return df
 
-# @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
 def simulate_system(
     latitude: float,
     longitude: float,
