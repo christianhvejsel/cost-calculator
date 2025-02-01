@@ -180,7 +180,7 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         title='Lifetime Energy to Load (TWh)',
         # xaxis_title='Energy (TWh)',
         barmode='stack',
-        height=175,
+        height=190,
         showlegend=True,
         legend=dict(
             orientation="h",
