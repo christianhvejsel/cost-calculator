@@ -12,6 +12,7 @@ import logging
 import time
 import streamlit as st
 from typing import Dict
+import numpy as np
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -41,7 +42,7 @@ PVLIB_CONFIG = {
     },
 }
 
-@st.cache_data
+# @st.cache_data(ttl=3600)
 def get_solar_ac_dataframe(
     latitude: float,
     longitude: float,
@@ -120,90 +121,75 @@ def simulate_battery_operation(
     operating_year: int,
 ) -> pd.DataFrame:
     """
-    Simulate battery, solar and generator operation for one year of system lifetime.
-
-    Models the charging and discharging of the battery storage system and generator
-    operation to meet the datacenter load, accounting for battery efficiency,
-    degradation, and power limits.
-
-    Args:
-        df: DataFrame containing solar generation profile
-        battery_capacity_mwh: Nameplate battery energy capacity in MWh
-        initial_battery_charge: Initial battery state of charge in MWh
-        generator_capacity: Generator power capacity in MW
-        load: Constant load power in MW
-        operating_year: Current year of operation (for degradation)
-
-    Returns:
-        DataFrame with added columns for battery state, energy flows, and generator output
+    Vectorized simulation of battery, solar and generator operation for one year.
+    
+    Uses numpy arrays for efficient computation of power flows and battery state.
     """
     # Calculate battery parameters with degradation
     battery_power_mw = battery_capacity_mwh / BATTERY_DURATION_HOURS
     degraded_capacity_mwh = battery_capacity_mwh * (
         1 - BATTERY_DEGRADATION_PCT_PER_YEAR * (operating_year - 1)
     )
-    battery_state_mwh = initial_battery_charge
-
-    # Initialize result lists
-    curtailed_solar_mwh = []
-    unmet_load_mwh = []
-    battery_state_history = []
-    battery_charge_mwh = []
-    battery_discharge_mwh = []
-    generator_output_mwh = []
-
-    # Simulate each timestep
-    for _, timestep in df.iterrows():
-        solar_generation_mw = timestep["scaled_solar_generation_mw"]
-
-        if solar_generation_mw > load_mw:
+    
+    # Convert solar generation to numpy array for faster computation
+    solar_generation = df["scaled_solar_generation_mw"].to_numpy()
+    n_steps = len(solar_generation)
+    
+    # Initialize arrays
+    battery_state = np.zeros(n_steps + 1)  # +1 for initial state
+    battery_state[0] = initial_battery_charge
+    battery_charge = np.zeros(n_steps)
+    battery_discharge = np.zeros(n_steps)
+    curtailed_solar = np.zeros(n_steps)
+    generator_output = np.zeros(n_steps)
+    unmet_load = np.zeros(n_steps)
+    
+    # Calculate power balance
+    power_balance = solar_generation - load_mw
+    excess_power = np.maximum(power_balance, 0)
+    deficit_power = np.maximum(-power_balance, 0)
+    
+    # Vectorized simulation
+    for t in range(n_steps):
+        if power_balance[t] > 0:
             # Excess solar case
-            excess_power_mw = solar_generation_mw - load_mw
-            available_storage_mwh = degraded_capacity_mwh - battery_state_mwh
-            stored_energy_mwh = min(
-                min(excess_power_mw, battery_power_mw), available_storage_mwh
+            available_storage = degraded_capacity_mwh - battery_state[t]
+            stored_energy = min(
+                min(excess_power[t], battery_power_mw),
+                available_storage
             )
-            curtailed_power_mwh = excess_power_mw - stored_energy_mwh
-            battery_state_mwh += stored_energy_mwh * BATTERY_ROUND_TRIP_EFFICIENCY**0.5
-
-            # Record results for excess case
-            curtailed_solar_mwh.append(curtailed_power_mwh)
-            unmet_load_mwh.append(0.0)
-            battery_state_history.append(battery_state_mwh)
-            battery_charge_mwh.append(stored_energy_mwh)
-            battery_discharge_mwh.append(0.0)
-            generator_output_mwh.append(0.0)
+            battery_charge[t] = stored_energy
+            curtailed_solar[t] = excess_power[t] - stored_energy
+            battery_state[t + 1] = (
+                battery_state[t] + stored_energy * BATTERY_ROUND_TRIP_EFFICIENCY**0.5
+            )
         else:
-            # Power deficit case
-            deficit_mw = load_mw - solar_generation_mw
-            max_discharge_mwh = min(
+            # Deficit case
+            max_discharge = min(
                 battery_power_mw,
-                min(deficit_mw / BATTERY_ROUND_TRIP_EFFICIENCY**0.5, battery_state_mwh),
+                min(
+                    deficit_power[t] / BATTERY_ROUND_TRIP_EFFICIENCY**0.5,
+                    battery_state[t]
+                )
             )
-            battery_state_mwh -= max_discharge_mwh
-            discharge_power_mw = max_discharge_mwh * BATTERY_ROUND_TRIP_EFFICIENCY**0.5
-            remaining_deficit_mw = deficit_mw - discharge_power_mw
-            generator_power_mw = min(remaining_deficit_mw, generator_capacity)
-            unmet_power_mw = remaining_deficit_mw - generator_power_mw
-
-            # Record results for deficit case
-            curtailed_solar_mwh.append(0.0)
-            unmet_load_mwh.append(unmet_power_mw)
-            battery_state_history.append(battery_state_mwh)
-            battery_charge_mwh.append(0.0)
-            battery_discharge_mwh.append(discharge_power_mw)
-            generator_output_mwh.append(generator_power_mw)
-
-    # Add results to DataFrame
-    df["battery_state_mwh"] = battery_state_history
-    df["battery_charge_mwh"] = battery_charge_mwh
-    df["battery_discharge_mwh"] = battery_discharge_mwh
-    df["curtailed_solar_mwh"] = curtailed_solar_mwh
-    df["generator_output_mwh"] = generator_output_mwh
-    df["unmet_load_mwh"] = unmet_load_mwh
-    df['load_served_mwh'] = load_mw - df['unmet_load_mwh']
-
-    return df
+            battery_discharge[t] = max_discharge * BATTERY_ROUND_TRIP_EFFICIENCY**0.5
+            remaining_deficit = deficit_power[t] - battery_discharge[t]
+            generator_output[t] = min(remaining_deficit, generator_capacity)
+            unmet_load[t] = remaining_deficit - generator_output[t]
+            battery_state[t + 1] = battery_state[t] - max_discharge
+    
+    # Add results to DataFrame efficiently using a single assignment
+    results = pd.DataFrame({
+        'battery_state_mwh': battery_state[:-1],  # Exclude final state
+        'battery_charge_mwh': battery_charge,
+        'battery_discharge_mwh': battery_discharge,
+        'curtailed_solar_mwh': curtailed_solar,
+        'generator_output_mwh': generator_output,
+        'unmet_load_mwh': unmet_load,
+        'load_served_mwh': load_mw - unmet_load
+    })
+    
+    return pd.concat([df, results], axis=1)
 
 
 def scale_solar_generation(
@@ -225,11 +211,11 @@ def scale_solar_generation(
     df["scaled_solar_generation_mw"] = df["p_mp"] * ac_capacity_mw * degradation_factor
     return df
 
-@st.cache_data
+# @st.cache_data(ttl=3600)
 def simulate_system(
     latitude: float,
     longitude: float,
-    solar_ac_dataframe: pd.DataFrame,
+    _solar_ac_dataframe: pd.DataFrame, # Underscore to avoid caching on this
     solar_capacity_mw: float,
     battery_power_mw: float,
     generator_capacity_mw: float,
@@ -262,7 +248,7 @@ def simulate_system(
 
     # Get normalized solar generation profile
     solar_generation_df = (
-        solar_ac_dataframe
+        _solar_ac_dataframe
         .reset_index()
         .rename(columns={"index": "time(UTC)", "value": "p_mp"})
     )
@@ -364,6 +350,6 @@ if __name__ == "__main__":
     }
 
     solar_ac_dataframe = get_solar_ac_dataframe(EXAMPLE_CONFIG["latitude"], EXAMPLE_CONFIG["longitude"])
-    results = simulate_system(**EXAMPLE_CONFIG, solar_ac_dataframe=solar_ac_dataframe)
+    results = simulate_system(**EXAMPLE_CONFIG, _solar_ac_dataframe=solar_ac_dataframe)
     results.write_csv("output_20_yrs.csv")
     print(results)

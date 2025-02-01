@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from typing import Dict
+from typing import Dict, Tuple
 from streamlit_folium import folium_static, st_folium
 import folium
 
@@ -192,34 +192,19 @@ def create_system_inputs() -> Dict:
 def create_map_input() -> Dict:
     st.subheader("Location")
 
-    if "map_lat_long" not in st.session_state:
-        st.session_state.map_lat_long = [MAP_INITIAL_LAT, MAP_INITIAL_LONG]
+    st.write("Center the map on your data center location.")
+    map = folium.Map([MAP_INITIAL_LAT, MAP_INITIAL_LONG], zoom_start=6, tiles="CartoDB Positron")
 
-    map = folium.Map(location=st.session_state.map_lat_long, zoom_start=3, tiles="CartoDB Positron")
+    def callback():
+        pass
 
-    folium.Marker(location=st.session_state.map_lat_long, draggable=False).add_to(map)
-
-    rendered_map = st_folium(map, height=370, use_container_width=True, key="folium_map")
-
-    # Update marker position immediately after each click
-    if rendered_map.get("last_clicked"):
-        st.session_state.map_lat_long = [rendered_map["last_clicked"]["lat"], rendered_map["last_clicked"]["lng"]]
-
-        # Redraw the map immediately with the new marker location
-        map = folium.Map(location=st.session_state.map_lat_long)
-        folium.Marker(
-            location=st.session_state.map_lat_long,
-            draggable=False
-        ).add_to(map)
-        rendered_map = st_folium(map, width=620, height=580, key="folium_map")
+    st_folium(map, height=370, use_container_width=True, key="folium_map", on_change=callback)
 
     # Get name of clicked location
-    rg_result = rg.search(st.session_state.map_lat_long)[0]
-    # st.markdown(
-    #     f'<p style="margin-top: -1.8em;">Selected ({round(st.session_state.map_lat_long[0], 1)}, {round(st.session_state.map_lat_long[1], 1)}) in {rg_result["admin1"]}, {rg_result["cc"]}</p>',
-    #     unsafe_allow_html=True
-    # )
-    return (*st.session_state.map_lat_long, f"{rg_result['admin1']}, {rg_result['cc']}")
+    lat_long_tuple = (st.session_state['folium_map']['center']['lat'], st.session_state['folium_map']['center']['lng'])
+    rg_result = rg.search(lat_long_tuple, mode=1)[0]
+    return (*lat_long_tuple, f"{rg_result['name']}, {rg_result['admin1']} ({rg_result['cc']})")
+
 
 def create_financial_inputs(generator_type: str) -> Dict:
     st.subheader("Financial Inputs")
@@ -370,7 +355,6 @@ def create_financial_inputs(generator_type: str) -> Dict:
             fuel_escalator = st.number_input("Fuel Escalator (% p.a.)", value=DEFAULTS_OM['fuel_escalator_pct'], format="%.2f")
 
     return {
-        'custom_lat_long': st.session_state.map_lat_long,
         'generator_om_fixed_dollar_per_kw': generator_om_fixed,
         'generator_om_variable_dollar_per_kwh': generator_om_variable,
         'fuel_price_dollar_per_mmbtu': fuel_price,

@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from typing import Dict, Optional
+import polars as pl
 
 # Global color constants
 SOLAR_COLOR = '#ffd700'  # yellow
@@ -184,12 +185,12 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.6,  # Position below x-axis
+            y=-0.4,  # Position below x-axis
             xanchor="center",
             x=0.5,
             traceorder="normal"
         ),
-        margin=dict(t=50, b=80, l=0, r=0),  # Increased bottom margin to accommodate legend
+        margin=dict(t=50, b=100, l=0, r=0),  # Increased bottom margin to accommodate legend
         yaxis=dict(showticklabels=False)  # Hide y-axis labels
     )
     
@@ -214,36 +215,38 @@ def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float,
     )
     return fig
 
-def display_daily_sample_chart(daily_sample: pd.DataFrame) -> None:
+def display_daily_sample_chart(daily_sample: pl.DataFrame) -> None:
     """Display a daily sample chart showing solar generation over time."""
+    daily_sample_pd = daily_sample.set_index('time(UTC)')
+    
     fig = go.Figure(data=[
         go.Scatter(
-            x=daily_sample.index,
-            y=daily_sample['scaled_solar_generation_mw'],
+            x=daily_sample_pd.index,
+            y=daily_sample_pd['scaled_solar_generation_mw'],
             mode='lines',
             name='Solar Generation (AC)',
             line=dict(color=SOLAR_COLOR, width=2),
             hovertemplate='%{y:.1f} MW<extra></extra>'
         ),
         go.Scatter(
-            x=daily_sample.index,
-            y=daily_sample['battery_discharge_mwh'] - daily_sample['battery_charge_mwh'],
+            x=daily_sample_pd.index,
+            y=daily_sample_pd['battery_discharge_mwh'] - daily_sample_pd['battery_charge_mwh'],
             mode='lines',
             name='Battery',
             line=dict(color=BESS_COLOR, width=2),
             hovertemplate='%{y:.1f} MW<extra></extra>'
         ),
         go.Scatter(
-            x=daily_sample.index,
-            y=daily_sample['generator_output_mwh'],
+            x=daily_sample_pd.index,
+            y=daily_sample_pd['generator_output_mwh'],
             mode='lines',
             name='Generator Output',
             line=dict(color=GENERATOR_COLOR, width=2),
             hovertemplate='%{y:.1f} MW<extra></extra>'
         ),
         go.Scatter(
-            x=daily_sample.index,
-            y=daily_sample['load_served_mwh'],
+            x=daily_sample_pd.index,
+            y=daily_sample_pd['load_served_mwh'],
             mode='lines',
             name='Data Center Load',
             line=dict(color=DATACENTER_COLOR, width=2),

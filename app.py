@@ -40,13 +40,15 @@ def main():
     map_col, graph_col = st.columns([2,2], gap="medium")
 
     with map_col:
+        # lat, long, location_name = 35, -100, "test"
         lat, long, location_name = create_map_input()
         inputs.update({'lat': lat, 'long': long})
+        print(f"Selected ({round(lat, 1)}, {round(long, 1)}) in {location_name}, now moving on...")
 
         calc_status_display = st.empty()
 
         st.session_state.calculation_status = f"Selected ({round(lat, 1)}, {round(long, 1)}) in {location_name}\nFetching weather data..."
-        calc_status_display.code(st.session_state.calculation_status)
+        calc_status_display.code(st.session_state.calculation_status, language="")
 
         t1 = time.time()
         solar_ac_dataframe = get_solar_ac_dataframe(lat, long)
