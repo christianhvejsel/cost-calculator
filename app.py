@@ -8,7 +8,7 @@ from lcoe_calculations import DataCenter
 from powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
 from st_output_components import (
     format_proforma, display_proforma, create_capex_chart,
-    create_energy_mix_chart, display_daily_sample_chart
+    create_energy_mix_chart, display_daily_sample_chart, create_subcategory_capex_charts
 )
 from st_inputs import create_system_inputs, calculate_capex_subtotals, create_map_input, create_financial_inputs
 
@@ -16,10 +16,12 @@ from st_inputs import create_system_inputs, calculate_capex_subtotals, create_ma
 def display_capex_breakdown(capex_subtotals: Dict[str, Dict[str, float]]) -> None:
     """Display CAPEX breakdown with metric and chart side by side."""
     st.subheader("CAPEX Breakdown")
-    total_capex = sum(component['absolute'] for component in capex_subtotals.values())
-    st.metric("Total CAPEX", f"${total_capex:,.1f}M")
-    absolute_values = {k: v['absolute'] for k, v in capex_subtotals.items()}
-    st.plotly_chart(create_capex_chart(absolute_values, total_capex), use_container_width=True)
+    total_capex = sum(component['total_absolute'] for component in capex_subtotals.values())
+    st.metric("Total CAPEX", f"${total_capex:.1f}M")
+    st.plotly_chart(create_capex_chart(capex_subtotals), use_container_width=True)
+
+    with st.expander("Subcategory breakdown"):
+        create_subcategory_capex_charts(capex_subtotals)
 
 def display_energy_mix(energy_mix: Dict[str, float]) -> None:
     """Display energy mix with metric and chart side by side."""
@@ -90,6 +92,7 @@ def main():
     with capex_col:
         # Calculate CAPEX subtotals for each system component
         capex_subtotals = calculate_capex_subtotals(inputs)
+        # display_capex_breakdown(capex_subtotals)
         display_capex_breakdown(capex_subtotals)
 
 

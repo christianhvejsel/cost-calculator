@@ -5,6 +5,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from typing import Dict, Optional
 import polars as pl
+import numpy as np
 
 # Global color constants
 SOLAR_COLOR = '#ffd700'  # yellow
@@ -13,6 +14,9 @@ GENERATOR_COLOR = '#808080'  # gray
 SYSTEM_INTEGRATION_COLOR = '#1f77b4'  # blue
 SOFT_COSTS_COLOR = '#2ca02c'  # green
 DATACENTER_COLOR = '#1f77b4'
+
+# Battery constants
+BATTERY_DURATION_HOURS = 4
 
 # Global units definition
 METRIC_UNITS = {
@@ -53,71 +57,54 @@ METRIC_UNITS = {
     'After-Tax Net Equity Cash Flow': '$, Millions'
 }
 
-def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure:
-    """Create a stacked horizontal bar chart showing CAPEX breakdown."""
-    fig = go.Figure(data=[
-        go.Bar(
-            name='Solar',
-            x=[capex['solar']],
-            y=[''],  # Empty label
-            orientation='h',
-            marker_color=SOLAR_COLOR,
-            text=f"${capex['solar']:,.1f}M",
-            textposition='inside',
-            hovertemplate="Solar CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
-            customdata=[(capex['solar']/total_capex)*100]
-        ),
-        go.Bar(
-            name='BESS',
-            x=[capex['bess']],
-            y=[''],  # Empty label
-            orientation='h',
-            marker_color=BESS_COLOR,
-            text=f"${capex['bess']:,.1f}M",
-            textposition='inside',
-            hovertemplate="BESS CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
-            customdata=[(capex['bess']/total_capex)*100]
-        ),
-        go.Bar(
-            name='Generator',
-            x=[capex['generator']],
-            y=[''],  # Empty label
-            orientation='h',
-            marker_color=GENERATOR_COLOR,
-            text=f"${capex['generator']:,.1f}M",
-            textposition='inside',
-            hovertemplate="Generator CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
-            customdata=[(capex['generator']/total_capex)*100]
-        ),
-        go.Bar(
-            name='System Integration',
-            x=[capex['system_integration']],
-            y=[''],  # Empty label
-            orientation='h',
-            marker_color=SYSTEM_INTEGRATION_COLOR,
-            text=f"${capex['system_integration']:,.1f}M",
-            textposition='inside',
-            hovertemplate="System Integration CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
-            customdata=[(capex['system_integration']/total_capex)*100]
-        ),
-        go.Bar(
-            name='Soft Costs',
-            x=[capex['soft_costs']],
-            y=[''],  # Empty label
-            orientation='h',
-            marker_color=SOFT_COSTS_COLOR,
-            text=f"${capex['soft_costs']:,.1f}M",
-            textposition='inside',
-            hovertemplate="Soft Costs CAPEX: $%{x:.1f}M<br>%{customdata:.1f}% of Total CAPEX<extra></extra>",
-            customdata=[(capex['soft_costs']/total_capex)*100]
+def create_capex_chart(capex_subtotals: Dict[str, Dict[str, float]]) -> go.Figure:
+    """Create a horizontal bar chart showing CAPEX breakdown with component details in hover."""
+    bars = []
+    
+    # Define category display names and colors
+    categories = {
+        'solar': {'display': 'Solar', 'color': SOLAR_COLOR},
+        'bess': {'display': 'BESS', 'color': BESS_COLOR},
+        'generator': {'display': 'Generator', 'color': GENERATOR_COLOR},
+        'system_integration': {'display': 'System Integration', 'color': SYSTEM_INTEGRATION_COLOR},
+        'soft_costs': {'display': 'Soft Costs', 'color': SOFT_COSTS_COLOR}
+    }
+    
+    # Calculate total CAPEX
+    total_capex = sum(cat_data['total_absolute'] for cat_data in capex_subtotals.values())
+    
+    # Sort categories by their total values in descending order
+    sorted_categories = sorted(
+        [(cat, info) for cat, info in categories.items() if cat in capex_subtotals],
+        key=lambda x: capex_subtotals[x[0]]['total_absolute'],
+        reverse=True
+    )
+    
+    for category, info in sorted_categories:
+        category_data = capex_subtotals[category]
+        value = float(category_data['total_absolute'])  # Ensure float conversion
+        
+        # Simple hover text with just the total and percentage
+        hover_text = f"<b>{info['display']}</b><br>${value:.1f}M<br>{float(value)/float(total_capex)*100:.1f}% of Total CAPEX"
+
+        bars.append(
+            go.Bar(
+                name=info['display'],
+                x=[float(value)],  # Ensure float
+                y=[''],
+                orientation='h',
+                marker_color=info['color'],
+                text=f"${float(value):.1f}M",
+                textposition='inside',
+                textfont=dict(size=16, color='#111'),
+                hoverinfo='text',
+                hovertext=hover_text
+            )
         )
-    ])
+
+    fig = go.Figure(data=bars)
 
     fig.update_layout(
-        # title=dict(
-        #     text='Breakdown',
-        #     # y=0.95  # Move title down slightly
-        # ),
         xaxis_title='CAPEX Cost ($ Millions)',
         barmode='stack',
         height=150,
@@ -125,13 +112,18 @@ def create_capex_chart(capex: Dict[str, float], total_capex: float) -> go.Figure
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.15,  # Move legend up
+            y=1.15,
             xanchor="center",
             x=0.5,
-            traceorder="normal"
+            traceorder="normal",
+            font=dict(size=14)
         ),
-        margin=dict(t=50, b=30, l=0, r=0),  # Adjusted top and bottom margins
-        yaxis=dict(showticklabels=False)  # Hide y-axis labels
+        margin=dict(t=50, b=30, l=0, r=0),
+        yaxis=dict(showticklabels=False),
+        xaxis=dict(
+            title_font=dict(size=14),
+            tickfont=dict(size=14)
+        )
     )
 
     return fig
@@ -144,54 +136,66 @@ def create_energy_mix_chart(energy_mix: Dict[str, float]) -> go.Figure:
         go.Bar(
             name='Solar (direct)',
             x=[energy_mix['solar_to_load_twh']],
-            y=[''],  # Empty label
+            y=[''],
             orientation='h',
             marker_color=SOLAR_COLOR,
-            text=f"{energy_mix['solar_to_load_twh']:,.1f} TWh",
+            text=f"{energy_mix['solar_to_load_twh']:,.0f} TWh",
             textposition='inside',
-            hovertemplate="Solar (direct): %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
+            textfont=dict(size=16, color='#111'),
+            hovertemplate="<b>Solar (direct): %{x:.1f} TWh</b><br><br>%{customdata:.1f}% of Total Energy<extra></extra>",
             customdata=[(energy_mix['solar_to_load_twh']/total_energy)*100]
         ),
         go.Bar(
             name='Solar (via BESS)',
             x=[energy_mix['bess_to_load_twh']],
-            y=[''],  # Empty label
+            y=[''],
             orientation='h',
             marker_color=BESS_COLOR,
-            text=f"{energy_mix['bess_to_load_twh']:,.1f} TWh",
+            text=f"{energy_mix['bess_to_load_twh']:,.0f} TWh",
             textposition='inside',
-            hovertemplate="Solar (via BESS): %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
+            textfont=dict(size=16, color='#111'),
+            hovertemplate="<b>Solar (via BESS): %{x:.1f} TWh</b><br><br>%{customdata:.1f}% of Total Energy<extra></extra>",
             customdata=[(energy_mix['bess_to_load_twh']/total_energy)*100]
         ),
         go.Bar(
             name='Generator',
             x=[energy_mix['generator_twh']],
-            y=[''],  # Empty label
+            y=[''],
             orientation='h',
             marker_color=GENERATOR_COLOR,
-            text=f"{energy_mix['generator_twh']:,.1f} TWh",
+            text=f"{energy_mix['generator_twh']:,.0f} TWh",
             textposition='inside',
-            hovertemplate="Generator: %{x:.1f} TWh<br>%{customdata:.1f}% of Total Energy<extra></extra>",
+            textfont=dict(size=16, color='#111'),
+            hovertemplate="<b>Generator: %{x:.1f} TWh</b><br><br>%{customdata:.1f}% of Total Energy<extra></extra>",
             customdata=[(energy_mix['generator_twh']/total_energy)*100]
         )
     ])
 
     fig.update_layout(
-        title='Lifetime Energy to Load (TWh)',
-        # xaxis_title='Energy (TWh)',
+        title=dict(
+            text='Lifetime Energy to Load (TWh)',
+            font=dict(size=14),
+            y=0.95  # Adjusted from default
+        ),
         barmode='stack',
-        height=190,
+        height=165,
         showlegend=True,
         legend=dict(
             orientation="h",
-            yanchor="top",
-            y=-0.4,  # Position below x-axis
+            yanchor="bottom",
+            y=1.02,
             xanchor="center",
             x=0.5,
-            traceorder="normal"
+            traceorder="normal",
+            font=dict(size=14)
         ),
-        margin=dict(t=50, b=100, l=0, r=0),  # Increased bottom margin to accommodate legend
-        yaxis=dict(showticklabels=False)  # Hide y-axis labels
+        margin=dict(t=70, b=30, l=0, r=0),
+        yaxis=dict(showticklabels=False),
+        xaxis=dict(
+            title='Energy (TWh)',
+            title_font=dict(size=14),
+            tickfont=dict(size=14)
+        )
     )
     
     return fig
@@ -255,17 +259,16 @@ def display_daily_sample_chart(daily_sample: pl.DataFrame) -> None:
     ])
     
     fig.update_layout(
-        # title='Power flow, sample week',
         height=360,
-        margin=dict(t=30, b=50, l=0, r=0),  # Bottom margin for legend
+        margin=dict(t=30, b=50, l=0, r=0),
         xaxis_title='Hours',
         yaxis_title='Power (MW)',
         legend=dict(
-            orientation="h",  # Horizontal orientation
+            orientation="h",
             yanchor="top",
-            y=1.02,  # Move above the plot
+            y=1.08,  # Moved up from 1.02
             xanchor="center",
-            x=0.5,  # Center horizontally
+            x=0.5,
             font=dict(size=11),
             traceorder="normal"
         ),
@@ -344,13 +347,25 @@ def format_proforma(proforma: pd.DataFrame) -> pd.DataFrame:
         # Add metrics in the group
         for metric in metrics:
             if metric in proforma.columns:
+                # Convert numpy types to Python types
+                npv_value = proforma.loc['NPV', metric]
+                if hasattr(npv_value, 'item'):  # Check if it's a numpy type
+                    npv_value = npv_value.item()  # Convert to Python type
+                
+                year_values = {}
+                for year in proforma.index:
+                    if year != 'NPV':
+                        val = proforma.loc[year, metric]
+                        if hasattr(val, 'item'):
+                            val = val.item()
+                        year_values[str(year)] = val
+
                 rows.append({
                     'Group': '',
                     'Metric': metric,
                     'Units': METRIC_UNITS.get(metric, ''),
-                    'Totals/NPV': proforma.loc['NPV', metric] if 'NPV' in proforma.index else '',
-                    **{str(year): proforma.loc[year, metric] if year in proforma.index and year != 'NPV' else None 
-                       for year in proforma.index if year != 'NPV'}
+                    'Totals/NPV': npv_value,
+                    **year_values
                 })
     
     # Create DataFrame
@@ -442,4 +457,94 @@ def display_proforma(proforma: Optional[pd.DataFrame]) -> None:
         hide_index=True,
         use_container_width=True,
         height=1200
-    ) 
+    )
+
+def create_subcategory_capex_charts(capex_subtotals: Dict[str, Dict[str, float]]) -> None:
+    """Create individual stacked bar charts for each category's components."""
+    # Define base colors and their gradients (darker to lighter)
+    color_gradients = {
+        'solar': ['#FFB700', '#FFC430', '#FFD147', '#FFDE70', '#FFEB99'],  # More pure yellow gradients
+        'bess': ['#FF6B00', '#FF8533', '#FF9955', '#FFAD77', '#FFC299'],   # Darker orange gradients
+        'generator': ['#4F4F4F', '#696969', '#808080', '#A9A9A9', '#D3D3D3'],  # Gray gradients
+        'system_integration': ['#0000CD', '#4169E1', '#4682B4', '#87CEEB', '#ADD8E6'],  # Blue gradients
+        'soft_costs': ['#228B22', '#2E8B57', '#3CB371', '#90EE90', '#98FB98']  # Green gradients
+    }
+
+    # Category display names
+    category_names = {
+        'solar': 'Solar',
+        'bess': 'BESS',
+        'generator': 'Generator',
+        'system_integration': 'System Integration',
+        'soft_costs': 'Soft Costs'
+    }
+
+    # Create a chart for each category
+    for category, category_data in capex_subtotals.items():
+        if 'components_absolute' not in category_data:
+            continue
+
+        components = category_data['components_absolute']
+        if not components:
+            continue
+
+        # Convert component values to millions and sort
+        components_millions = {k: float(v) / 1_000_000 for k, v in components.items()}
+        sorted_components = sorted(components_millions.items(), key=lambda x: x[1], reverse=True)
+
+        # Create bars for each component
+        bars = []
+        for i, (component_name, value) in enumerate(sorted_components):
+            formatted_name = component_name.replace('_', ' ').title()
+            color = color_gradients[category][min(i, len(color_gradients[category])-1)]
+            
+            bars.append(
+                go.Bar(
+                    name=formatted_name,
+                    x=[value],
+                    y=[''],
+                    orientation='h',
+                    marker_color=color,
+                    text=f"${value:.1f}M",
+                    textposition='inside',
+                    textfont=dict(size=14, color='#111'),
+                    hovertemplate=f"<b>{formatted_name}</b><br>${value:.1f}M<extra></extra>"
+                )
+            )
+
+        # Create figure
+        fig = go.Figure(data=bars)
+        
+        # Calculate total for the category
+        total = sum(v for _, v in sorted_components)
+
+        # Update layout
+        fig.update_layout(
+            title=dict(
+                text=f"{category_names[category]} Components (Total: ${total:.1f}M)",
+                font=dict(size=14),
+                y=0.95
+            ),
+            barmode='stack',
+            height=180,  # Increased height to accommodate legend
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.25,  # Adjusted from 1.35 to 1.25
+                xanchor="center",
+                x=0.5,
+                traceorder="normal",
+                font=dict(size=12)
+            ),
+            margin=dict(t=100, b=20, l=0, r=0),  # Increased top margin
+            yaxis=dict(showticklabels=False),
+            xaxis=dict(
+                title='Cost ($ Millions)',
+                title_font=dict(size=12),
+                tickfont=dict(size=12)
+            )
+        )
+
+        # Display the chart
+        st.plotly_chart(fig, use_container_width=True) 
