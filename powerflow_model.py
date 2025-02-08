@@ -351,5 +351,5 @@ if __name__ == "__main__":
 
     solar_ac_dataframe = get_solar_ac_dataframe(EXAMPLE_CONFIG["latitude"], EXAMPLE_CONFIG["longitude"])
     results = simulate_system(**EXAMPLE_CONFIG, _solar_ac_dataframe=solar_ac_dataframe)
-    results.write_csv("output_20_yrs.csv")
+    results['annual_results'].to_csv("output_20_yrs.csv")
     print(results)

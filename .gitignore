@@ -1,3 +1,10 @@
+data/
+ensemble/
+*.ipynb
+*.csv
+generate_gif.py
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
