@@ -2,15 +2,14 @@
 
 import streamlit as st
 import pandas as pd
-from typing import Dict, Tuple
-from streamlit_folium import folium_static, st_folium
+from typing import Dict
+from streamlit_folium import st_folium
 import folium
 
 from st_output_components import create_capacity_chart
 from defaults import (
-    DATACENTER_DEMAND_MW, BESS_HRS_STORAGE, DEFAULTS_GENERATORS,
-    DEFAULTS_SOLAR_CAPEX, DEFAULTS_BESS_CAPEX, DEFAULTS_SYSTEM_INTEGRATION_CAPEX,
-    DEFAULTS_SOFT_COSTS_CAPEX, DEFAULTS_OM, DEFAULTS_FINANCIAL,
+    BESS_HRS_STORAGE, DEFAULTS_GENERATORS, DEFAULTS_SOLAR_CAPEX, DEFAULTS_BESS_CAPEX,
+    DEFAULTS_SYSTEM_INTEGRATION_CAPEX, DEFAULTS_SOFT_COSTS_CAPEX, DEFAULTS_OM, DEFAULTS_FINANCIAL,
     DEFAULTS_DEPRECIATION_SCHEDULE
 )
 import reverse_geocoder as rg

@@ -16,7 +16,6 @@ def load_simulation_data(file_path: str) -> pd.DataFrame:
         'BESS charged (MWh)',
         'BESS discharged (MWh)',
         'Generator Output (MWh)',
-        # 'Generator Fuel Input (MMBtu)',
         'Load Served (MWh)'
     ]
     

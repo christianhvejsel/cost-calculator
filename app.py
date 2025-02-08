@@ -26,37 +26,33 @@ def display_capex_breakdown(capex_subtotals: Dict[str, Dict[str, float]]) -> Non
 def display_energy_mix(energy_mix: Dict[str, float]) -> None:
     """Display energy mix with metric and chart side by side."""
     st.subheader("Energy Mix")
-    # col1, col2 = st.columns([1, 3])
-    # with col1:
     st.metric("Renewable %", f"{energy_mix['renewable_percentage']:.1f}%")
-    # with col2:
     st.plotly_chart(create_energy_mix_chart(energy_mix), use_container_width=True)
 
 def main():
     """Main application."""
     st.set_page_config(layout="wide", page_title="Solar Data Center LCOE Calculator")
     
-    # Create input sections
     inputs = create_system_inputs()
 
     map_col, graph_col = st.columns([2,2], gap="medium")
 
     with map_col:
-        # lat, long, location_name = 35, -100, "test"
         lat, long, location_name = create_map_input()
         inputs.update({'lat': lat, 'long': long})
-        print(f"Selected ({round(lat, 1)}, {round(long, 1)}) in {location_name}, now moving on...")
 
         calc_status_display = st.empty()
 
         st.session_state.calculation_status = f"Selected ({round(lat, 1)}, {round(long, 1)}) in {location_name}\nFetching weather data..."
         calc_status_display.code(st.session_state.calculation_status, language="")
 
+        # Fetch weather data
         t1 = time.time()
         solar_ac_dataframe = get_solar_ac_dataframe(lat, long)
         st.session_state.calculation_status += f"\nWeather data fetched in {time.time()-t1:.2f} seconds"
         calc_status_display.code(st.session_state.calculation_status)
 
+        # Simulate solar and battery power flow
         st.session_state.calculation_status += "\nSimulating solar and battery power flow..."
         calc_status_display.code(st.session_state.calculation_status)
 
@@ -76,13 +72,17 @@ def main():
         daily_powerflow_results = powerflow_results['daily_sample']
 
     with graph_col:
+        # Display power flow sample week
         st.subheader("Power Flow (sample week)")
         display_daily_sample_chart(daily_powerflow_results)
+
+        # Display energy mix
         energy_mix = calculate_energy_mix(annual_powerflow_results)
         display_energy_mix(energy_mix)
 
     st.divider()
 
+    # Financial inputs
     financial_col, capex_col = st.columns([2, 2], gap="medium")
 
     with financial_col:
@@ -95,7 +95,7 @@ def main():
         # display_capex_breakdown(capex_subtotals)
         display_capex_breakdown(capex_subtotals)
 
-
+    # Now create the DataCenter instance to simulate LCOE
     try:
         # Create DataCenter instance (this will also load and filter simulation data)
         data_center = DataCenter(
@@ -132,14 +132,11 @@ def main():
     
 
     # Calculate LCOE
-    start_time = time.time()
     lcoe, pro_forma = data_center.calculate_lcoe()
-    calculation_time = time.time() - start_time
     
     # Display LCOE  
     st.subheader("Levelized Cost of Electricity")
     st.metric("Calculated LCOE", f"${lcoe:.2f}/MWh")
-    # st.text(f"(Ran in {calculation_time*1000:.0f} ms)")
     
     st.subheader("Capital Breakdown by Year")
     formatted_proforma = format_proforma(pro_forma)

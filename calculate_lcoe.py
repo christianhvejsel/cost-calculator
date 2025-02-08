@@ -2,26 +2,33 @@
 """Command line wrapper for LCOE calculation."""
 
 import argparse
+import logging
 from lcoe_calculations import DataCenter
+from powerflow_model import get_solar_ac_dataframe, simulate_system
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Calculate LCOE for a datacenter configuration')
     
     # Required arguments
-    parser.add_argument('--location', required=True, help='Location of the datacenter')
-    parser.add_argument('--solar', type=int, required=True, dest='solar_pv_capacity_mw',
+    parser.add_argument('--lat', type=float, required=True, help='Latitude of the datacenter')
+    parser.add_argument('--long', type=float, required=True, help='Longitude of the datacenter')
+    parser.add_argument('--solar-mw', type=int, required=True, dest='solar_pv_capacity_mw',
                        help='Solar PV capacity in MW')
-    parser.add_argument('--bess', type=int, required=True, dest='bess_max_power_mw',
+    parser.add_argument('--bess-mw', type=int, required=True, dest='bess_max_power_mw',
                        help='BESS power capacity in MW')
-    parser.add_argument('--generator', type=int, required=True, dest='generator_capacity_mw',
+    parser.add_argument('--generator-mw', type=int, required=True, dest='generator_capacity_mw',
                        help='Generator capacity in MW')
+    parser.add_argument('--datacenter-load-mw', type=int,
+                       help='Datacenter load in MW')
     
     # Optional arguments (all parameter names match DataCenter class)
     parser.add_argument('--generator-type', choices=['Gas Engine', 'Gas Turbine'],
                        help='Type of generator')
-    parser.add_argument('--datacenter-load-mw', type=int,
-                       help='Datacenter load in MW')
     parser.add_argument('--bess-hrs-storage', type=int,
                        help='BESS hours of storage')
     parser.add_argument('--solar-capex-total-dollar-per-w', type=float,
@@ -76,11 +83,27 @@ if __name__ == '__main__':
     args = parse_args()
     
     # Remove None values from args
-    kwargs = {k: v for k, v in args.items() if v is not None}
+    inputs = {k: v for k, v in args.items() if v is not None and k not in ['lat', 'long']}
+
+    logger.info(f"Getting solar generation data for ({args['lat']}, {args['long']})")
+    solar_ac_dataframe = get_solar_ac_dataframe(args['lat'], args['long'])
+    logger.info(f"Simulating battery and solar powerflow for ({args['lat']}, {args['long']})")
+    powerflow_results = simulate_system(
+        args['lat'],
+        args['long'],
+        solar_ac_dataframe,
+        inputs['solar_pv_capacity_mw'],
+        inputs['bess_max_power_mw'],
+        inputs['generator_capacity_mw'],
+        inputs['datacenter_load_mw'],
+    )
+
+    annual_powerflow_results = powerflow_results['annual_results']
     
+    logger.info("Creating DataCenter instance and calculating LCOE...")
     # Create DataCenter instance and calculate LCOE
-    data_center = DataCenter(**kwargs)
+    data_center = DataCenter(**inputs, filtered_simulation_data=annual_powerflow_results)
     lcoe, proforma = data_center.calculate_lcoe()
     
-    print(f"\nResults for {kwargs['location']} for {kwargs['solar_pv_capacity_mw']}MW solar | {kwargs['bess_max_power_mw']}MW BESS | {kwargs['generator_capacity_mw']}MW generator")
-    print(f"LCOE: ${lcoe:.2f}/MWh")
+    logger.info(f"Results for ({args['lat']}, {args['long']}) for {inputs['solar_pv_capacity_mw']}MW solar | {inputs['bess_max_power_mw']}MW BESS | {inputs['generator_capacity_mw']}MW generator")
+    logger.info(f"LCOE: ${lcoe:.2f}/MWh")

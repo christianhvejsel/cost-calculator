@@ -1,9 +1,8 @@
 """ Datacenter class for LCOE calculations and proforma generation."""
 
 import pandas as pd
-from typing import Union, Tuple, Dict
+from typing import Tuple
 from dataclasses import dataclass, field
-from pathlib import Path
 from data_loader import load_simulation_data
 from defaults import (
     DATACENTER_DEMAND_MW,
@@ -91,13 +90,13 @@ class DataCenter:
     combined_tax_rate_pct: float = DEFAULTS_FINANCIAL['combined_tax_rate_pct']
     construction_time_years: int = DEFAULTS_FINANCIAL['construction_time_years']
 
-    # Optional: simulation data can be passed in if already loaded
+    # Optional: simulation data can be passed in if already in memory
     full_simulation_data: pd.DataFrame = None
     filtered_simulation_data: pd.DataFrame = None
     location: str = None
     
     def __post_init__(self):
-        if self.full_simulation_data is None:
+        if self.full_simulation_data is None and self.filtered_simulation_data is None:
             self.full_simulation_data = load_simulation_data(SIMULATION_DATA_PATH)
 
         if self.filtered_simulation_data is None:

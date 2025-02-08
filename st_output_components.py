@@ -5,7 +5,6 @@ import streamlit as st
 import plotly.graph_objects as go
 from typing import Dict, Optional
 import polars as pl
-import numpy as np
 
 # Global color constants
 SOLAR_COLOR = '#ffd700'  # yellow
