@@ -164,7 +164,7 @@ def create_system_inputs() -> Dict:
 
     st.title("Solar Datacenter Cost Calculator", anchor="solar-datacenter-cost-calculator")
     st.markdown(
-        '<p style="font-size: 0.9em; margin-bottom: 20px;">By Duncan Campbell and Ben James (anyone else to credit here?)</p>',
+        '<p style="font-size: 0.9em; margin-bottom: 20px;">By <a href="https://x.com/duncan__c">Duncan Campbell</a> and <a href="https://benjames.io">Ben James</a></p>',
         unsafe_allow_html=True
     )
 
