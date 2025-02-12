@@ -195,7 +195,7 @@ def create_system_inputs() -> Dict:
             value=int(query_params.get("solar", 250)),
             min_value=0,
             max_value=5000,
-            step=100,
+            step=50,
             key="solar",
             on_change=update_param,
             args=("solar",)
