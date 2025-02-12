@@ -4,7 +4,7 @@ import streamlit as st
 from typing import Dict
 import time
 
-from lcoe_calculations import DataCenter
+from datacenter import DataCenter
 from powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
 from st_output_components import (
     format_proforma, display_proforma, create_capex_chart,

@@ -3,7 +3,7 @@
 
 import argparse
 import logging
-from lcoe_calculations import DataCenter
+from datacenter import DataCenter
 from powerflow_model import get_solar_ac_dataframe, simulate_system
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ if __name__ == '__main__':
     logger.info(f"Getting solar generation data for ({args['lat']}, {args['long']})")
     solar_ac_dataframe = get_solar_ac_dataframe(args['lat'], args['long'])
     logger.info(f"Simulating battery and solar powerflow for ({args['lat']}, {args['long']})")
+
     powerflow_results = simulate_system(
         args['lat'],
         args['long'],
