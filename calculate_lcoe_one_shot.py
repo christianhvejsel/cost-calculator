@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Calculate LCOE for a datacenter configuration')
+    parser = argparse.ArgumentParser(description='Calculate LCOE for a single datacenter configuration')
     
     # Required arguments
     parser.add_argument('--lat', type=float, required=True, help='Latitude of the datacenter')
