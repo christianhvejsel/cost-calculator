@@ -13,6 +13,7 @@ import time
 import streamlit as st
 from typing import Dict
 import numpy as np
+import tzfpy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,9 +86,13 @@ def get_solar_ac_dataframe(
     else:
         raise ValueError("system_type must be either 'fixed-tilt' or 'single-axis'")
 
-    # Create array and location objects
+    # Get timezone for the location using tzfpy
+    timezone_str = tzfpy.get_tz(longitude, latitude)  # Note: tzfpy takes (lon, lat) order
+    print(f"Timezone: {timezone_str}")
+    
+    # Create array and location objects with timezone
     array = pvsystem.Array(mount, **PVLIB_CONFIG)
-    site = location.Location(latitude, longitude)
+    site = location.Location(latitude, longitude)  # Removed timezone parameter
 
     # Create PV system with normalized 1 MW rating
     pv_system = pvsystem.PVSystem(
@@ -110,7 +115,14 @@ def get_solar_ac_dataframe(
     model.run_model(weather_data)
     logger.info(f"Model run took {(time.time() - model_start)*1000:.1f} ms")
 
-    return model.results.ac
+    # Process the results
+    solar_generation_df = model.results.ac.reset_index()
+    print(solar_generation_df.head())
+    
+    # Convert UTC times to local timezone (timestamps are already UTC-aware)
+    solar_generation_df["time_local"] = solar_generation_df["time(UTC)"].dt.tz_convert(timezone_str)
+
+    return solar_generation_df
 
 
 def simulate_battery_operation(
@@ -248,12 +260,7 @@ def simulate_system(
     battery_capacity_mwh = battery_power_mw * BATTERY_DURATION_HOURS
 
     # Get normalized solar generation profile
-    solar_generation_df = (
-        _solar_ac_dataframe
-        .reset_index()
-        .rename(columns={"index": "time(UTC)", "value": "p_mp"})
-    )
-    solar_generation_df["time(UTC)"] = pd.to_datetime(solar_generation_df["time(UTC)"])
+    solar_generation_df = _solar_ac_dataframe
 
     annual_results = []
     for operating_year in range(1, SYSTEM_LIFETIME_YEARS + 1):
@@ -278,7 +285,7 @@ def simulate_system(
         )
         if operating_year == 1:
             # Slice 24h * 7 days of data from the middle of the year
-            sample_week_df = result_df[result_df['time(UTC)'].dt.dayofyear.isin(range(182, 189))]
+            sample_week_df = result_df[result_df['time_local'].dt.dayofyear.isin(range(182, 189))]
             sample_week_df = sample_week_df.reset_index(drop=True)
         solar_mwh_raw_tot = result_df["scaled_solar_generation_mw"].sum()
         solar_mwh_curtailed_tot = result_df["curtailed_solar_mwh"].sum()

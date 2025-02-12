@@ -220,7 +220,7 @@ def create_capacity_chart(datacenter_demand: float, solar_pv_capacity: float,
 
 def display_daily_sample_chart(daily_sample: pl.DataFrame) -> None:
     """Display a daily sample chart showing solar generation over time."""
-    daily_sample_pd = daily_sample.set_index('time(UTC)')
+    daily_sample_pd = daily_sample.set_index('time_local')
     
     fig = go.Figure(data=[
         go.Scatter(
