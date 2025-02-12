@@ -2,10 +2,10 @@ There are three ways to use:
 
 ## 1. Command line interface
 ```bash
-python calculate_lcoe.py --lat 31.9 --long -106.2 --solar-mw 250 --bess-mw 650 --generator-mw 125 --datacenter-load-mw 100
+python calculate_lcoe_one_shot.py --lat 31.9 --long -106.2 --solar-mw 250 --bess-mw 650 --generator-mw 125 --datacenter-load-mw 100
 ```
 
-(See `calculate_lcoe.py` for all possible args)
+(See `calculate_lcoe_one_shot.py` for all possible args)
 
 ## 2. Streamlit interface
 `streamlit run app.py`

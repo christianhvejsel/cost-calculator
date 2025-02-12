@@ -44,7 +44,24 @@ PVLIB_CONFIG = {
     },
 }
 
-@st.cache_data(ttl=3600)
+
+def st_conditional_cache(func):
+    """Wrapper that only applies st.cache_data if running in streamlit.
+    
+    TODO: may want to implement a more generic cache for when not running in streamlit.
+    """
+    try:
+        import streamlit as st
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        
+        if get_script_run_ctx() is not None:
+            return st.cache_data(ttl=3600)(func)
+        return func
+    except:
+        return func
+
+
+@st_conditional_cache
 def get_solar_ac_dataframe(
     latitude: float,
     longitude: float,
@@ -108,7 +125,7 @@ def get_solar_ac_dataframe(
     weather_start = time.time()
     try:
         weather_data = iotools.get_pvgis_tmy(latitude, longitude)[0]
-        logger.info(f"Weather data fetch took {(time.time() - weather_start)*1000:.1f} ms")
+        logger.debug(f"Weather data fetch took {(time.time() - weather_start)*1000:.1f} ms")
     except requests.exceptions.HTTPError:
         st.warning("you can't pick somewhere over the sea !!!!")
         st.stop()
@@ -116,11 +133,10 @@ def get_solar_ac_dataframe(
     # Run performance model
     model_start = time.time()
     model.run_model(weather_data)
-    logger.info(f"Model run took {(time.time() - model_start)*1000:.1f} ms")
+    logger.debug(f"Model run took {(time.time() - model_start)*1000:.1f} ms")
 
     # Process the results
     solar_generation_df = model.results.ac.reset_index()
-    print(solar_generation_df.head())
     
     # Convert UTC times to local timezone (timestamps are already UTC-aware)
     solar_generation_df["time_local"] = solar_generation_df["time(UTC)"].dt.tz_convert(timezone_str)
@@ -227,7 +243,8 @@ def scale_solar_generation(
     df["scaled_solar_generation_mw"] = df["p_mp"] * ac_capacity_mw * degradation_factor
     return df
 
-@st.cache_data(ttl=3600)
+
+@st_conditional_cache
 def simulate_system(
     latitude: float,
     longitude: float,
@@ -267,7 +284,7 @@ def simulate_system(
 
     annual_results = []
     for operating_year in range(1, SYSTEM_LIFETIME_YEARS + 1):
-        logger.info(f"Simulating year {operating_year} of {SYSTEM_LIFETIME_YEARS}")
+        logger.debug(f"Simulating year {operating_year} of {SYSTEM_LIFETIME_YEARS}")
 
         # Scale solar generation for current year
         scaled_df = scale_solar_generation(
