@@ -14,7 +14,7 @@ import streamlit as st
 from typing import Dict
 import numpy as np
 import tzfpy
-
+import requests
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -107,8 +107,12 @@ def get_solar_ac_dataframe(
 
     # Fetch and process weather data
     weather_start = time.time()
-    weather_data = iotools.get_pvgis_tmy(latitude, longitude)[0]
-    logger.info(f"Weather data fetch took {(time.time() - weather_start)*1000:.1f} ms")
+    try:
+        weather_data = iotools.get_pvgis_tmy(latitude, longitude)[0]
+        logger.info(f"Weather data fetch took {(time.time() - weather_start)*1000:.1f} ms")
+    except requests.exceptions.HTTPError as e:
+        st.warning("you can't pick somewhere over the sea !!!!")
+        st.stop()
 
     # Run performance model
     model_start = time.time()
