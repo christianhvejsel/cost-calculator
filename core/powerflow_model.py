@@ -88,7 +88,6 @@ def get_solar_ac_dataframe(
 
     # Get timezone for the location using tzfpy
     timezone_str = tzfpy.get_tz(longitude, latitude)  # Note: tzfpy takes (lon, lat) order
-    print(f"Timezone: {timezone_str}")
     
     # Create array and location objects with timezone
     array = pvsystem.Array(mount, **PVLIB_CONFIG)
@@ -110,7 +109,7 @@ def get_solar_ac_dataframe(
     try:
         weather_data = iotools.get_pvgis_tmy(latitude, longitude)[0]
         logger.info(f"Weather data fetch took {(time.time() - weather_start)*1000:.1f} ms")
-    except requests.exceptions.HTTPError as e:
+    except requests.exceptions.HTTPError:
         st.warning("you can't pick somewhere over the sea !!!!")
         st.stop()
 

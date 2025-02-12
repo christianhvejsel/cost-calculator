@@ -3,8 +3,8 @@
 import pandas as pd
 from typing import Tuple
 from dataclasses import dataclass, field
-from data_loader import load_simulation_data
-from defaults import (
+from core.data_loader import load_simulation_data
+from core.defaults import (
     DATACENTER_DEMAND_MW,
     SIMULATION_DATA_PATH,
     GENERATOR_HEAT_RATES,

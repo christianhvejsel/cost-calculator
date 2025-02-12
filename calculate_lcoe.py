@@ -3,8 +3,8 @@
 
 import argparse
 import logging
-from datacenter import DataCenter
-from powerflow_model import get_solar_ac_dataframe, simulate_system
+from core.datacenter import DataCenter
+from core.powerflow_model import get_solar_ac_dataframe, simulate_system
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -87,8 +87,8 @@ if __name__ == '__main__':
 
     logger.info(f"Getting solar generation data for ({args['lat']}, {args['long']})")
     solar_ac_dataframe = get_solar_ac_dataframe(args['lat'], args['long'])
-    logger.info(f"Simulating battery and solar powerflow for ({args['lat']}, {args['long']})")
 
+    logger.info(f"Simulating battery and solar powerflow for ({args['lat']}, {args['long']})")
     powerflow_results = simulate_system(
         args['lat'],
         args['long'],
@@ -98,12 +98,9 @@ if __name__ == '__main__':
         inputs['generator_capacity_mw'],
         inputs['datacenter_load_mw'],
     )
-
-    annual_powerflow_results = powerflow_results['annual_results']
     
     logger.info("Creating DataCenter instance and calculating LCOE...")
-    # Create DataCenter instance and calculate LCOE
-    data_center = DataCenter(**inputs, filtered_simulation_data=annual_powerflow_results)
+    data_center = DataCenter(**inputs, filtered_simulation_data=powerflow_results['annual_results'])
     lcoe, proforma = data_center.calculate_lcoe()
     
     logger.info(f"Results for ({args['lat']}, {args['long']}) for {inputs['solar_pv_capacity_mw']}MW solar | {inputs['bess_max_power_mw']}MW BESS | {inputs['generator_capacity_mw']}MW generator")

@@ -6,8 +6,8 @@ from typing import Dict
 from streamlit_folium import st_folium
 import folium
 
-from st_output_components import create_capacity_chart
-from defaults import (
+from app_components.st_outputs import create_capacity_chart
+from core.defaults import (
     BESS_HRS_STORAGE, DEFAULTS_GENERATORS, DEFAULTS_SOLAR_CAPEX, DEFAULTS_BESS_CAPEX,
     DEFAULTS_SYSTEM_INTEGRATION_CAPEX, DEFAULTS_SOFT_COSTS_CAPEX, DEFAULTS_OM, DEFAULTS_FINANCIAL,
     DEFAULTS_DEPRECIATION_SCHEDULE

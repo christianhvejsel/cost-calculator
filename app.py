@@ -4,13 +4,13 @@ import streamlit as st
 from typing import Dict
 import time
 
-from datacenter import DataCenter
-from powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
-from st_output_components import (
+from core.datacenter import DataCenter
+from core.powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
+from app_components.st_outputs import (
     format_proforma, display_proforma, create_capex_chart,
     create_energy_mix_chart, display_daily_sample_chart, create_subcategory_capex_charts
 )
-from st_inputs import create_system_inputs, calculate_capex_subtotals, create_map_input, create_financial_inputs
+from app_components.st_inputs import create_system_inputs, calculate_capex_subtotals, create_map_input, create_financial_inputs
 
 
 def display_capex_breakdown(capex_subtotals: Dict[str, Dict[str, float]]) -> None:

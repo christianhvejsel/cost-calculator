@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Dict, List
 
-from defaults import SIMULATION_DATA_PATH
+from core.defaults import SIMULATION_DATA_PATH
 
 def load_simulation_data(file_path: str) -> pd.DataFrame:
     """Load and preprocess simulation data from CSV file."""
