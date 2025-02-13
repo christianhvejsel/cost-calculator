@@ -145,29 +145,6 @@ def calculate_capex_subtotals(inputs: Dict) -> Dict[str, Dict[str, float]]:
 
 def create_system_inputs() -> Dict:
     """Create all input sections in the Streamlit app."""
-    # Add custom CSS to reduce top padding
-    st.markdown("""
-        <style>
-            .block-container {
-                padding-top: 1rem;
-                padding-bottom: 0rem;
-            }
-            #solar-datacenter-cost-calculator {
-                margin-bottom: 0rem;
-                padding-bottom: 0rem;
-            }
-            p {
-                margin-bottom: 0rem;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
-    st.title("Solar Datacenter Cost Calculator", anchor="solar-datacenter-cost-calculator")
-    st.markdown(
-        '<p style="font-size: 1em; margin-bottom: 20px;">By <a href="https://benjames.io">Ben James</a> and the <a href="https://offgridai.us">OffGridAI</a> team</p>',
-        unsafe_allow_html=True
-    )
-
     st.subheader("System Configuration")
     col1, col2, col3, col4 = st.columns(4)
     

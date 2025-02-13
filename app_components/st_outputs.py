@@ -56,6 +56,39 @@ METRIC_UNITS = {
     'After-Tax Net Equity Cash Flow': '$, Millions'
 }
 
+def display_intro_section():
+    st.set_page_config(layout="wide", page_title="Solar Data Center LCOE Calculator")
+    # Add custom CSS to reduce top padding
+    st.markdown("""
+        <style>
+            .block-container {
+                padding-top: 1rem;
+                padding-bottom: 0rem;
+            }
+            #solar-datacenter-cost-calculator {
+                margin-bottom: 0rem;
+                padding-bottom: 0rem;
+            }
+            p {
+                margin-bottom: 0rem;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    st.title("Solar Datacenter Cost Calculator", anchor="solar-datacenter-cost-calculator")
+    st.markdown(
+        '<p style="font-size: 1em; margin-bottom: 20px;">By <a href="https://benjames.io">Ben James</a> and the <a href="https://offgridai.us">OffGridAI</a> team</p>',
+        unsafe_allow_html=True
+    )
+    
+    st.markdown(
+        """
+        This tool calculates the cost of electricity for a datacenter powered by solar, batteries, and gas generation.
+        1. Input the generation mix, location, and financial assumptions
+        2. Solar generation is fetched for the selected location, and solar/battery/generator powerflow is simulated
+        3. The tool calculates the Levelised Cost of Energy (LCOE) of the system.
+        """
+    )
+
 def create_capex_chart(capex_subtotals: Dict[str, Dict[str, float]]) -> go.Figure:
     """Create a horizontal bar chart showing CAPEX breakdown with component details in hover."""
     bars = []

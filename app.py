@@ -7,7 +7,7 @@ import time
 from core.datacenter import DataCenter
 from core.powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
 from app_components.st_outputs import (
-    format_proforma, display_proforma, create_capex_chart,
+    format_proforma, display_proforma, create_capex_chart, display_intro_section,
     create_energy_mix_chart, display_daily_sample_chart, create_subcategory_capex_charts
 )
 from app_components.st_inputs import create_system_inputs, calculate_capex_subtotals, create_map_input, create_financial_inputs
@@ -31,7 +31,7 @@ def display_energy_mix(energy_mix: Dict[str, float]) -> None:
 
 def main():
     """Main application."""
-    st.set_page_config(layout="wide", page_title="Solar Data Center LCOE Calculator")
+    display_intro_section()
     
     inputs = create_system_inputs()
 
