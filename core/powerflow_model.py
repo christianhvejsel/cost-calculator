@@ -89,7 +89,7 @@ def get_solar_ac_dataframe(
     Raises:
         ValueError: If system_type is not 'fixed-tilt' or 'single-axis'
     """
-    logger.info(
+    logger.debug(
         f"Starting solar AC calculation for {latitude}, {longitude} with {system_type} system"
     )
 
@@ -270,7 +270,7 @@ def simulate_system(
     Returns:
         Polars DataFrame containing annual performance metrics for the system
     """
-    logger.info(
+    logger.debug(
         f"Starting simulation for lat={latitude}, lon={longitude}, "
         f"solar={solar_capacity_mw} MW, battery={battery_power_mw} MW/"
         f"{battery_power_mw * BATTERY_DURATION_HOURS} MWh, generator={generator_capacity_mw} MW"
@@ -339,7 +339,7 @@ def simulate_system(
             }
         )
 
-    logger.info("Simulation completed successfully")
+    logger.debug("Simulation completed successfully")
     return {
         "annual_results": pd.DataFrame(annual_results),
         "daily_sample": sample_week_df
