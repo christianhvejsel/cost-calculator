@@ -149,9 +149,8 @@ def save_raw_results(results: List[Dict[str, Any]], output_path: Path) -> None:
     ]
     df = df[columns]
     
-    # Save to CSV
     df.to_csv(output_path, index=False)
-    logger.info(f"Results saved to {output_path}")
+    logger.info(f"Raw results saved to {output_path}")
 
 async def main():
     logger.info("LCOE Solar DC Ensemble Simulation")
@@ -162,9 +161,9 @@ async def main():
     long = -106.4850
     
     ################### Define test cases ###################
-    solar_capacities = [x for x in range(0, 1000, 100)]
-    bess_capacities = list(range(0, 200, 100))
-    generator_capacities = [100]
+    solar_capacities = list(range(0, 1000, 100))
+    bess_capacities = list(range(0, 1000, 100))
+    generator_capacities = [125]
 
     cases = []
     # Generate all permutations
@@ -204,7 +203,7 @@ async def main():
     # Save Pareto optimal points
     pareto_output_path = Path(f"ensemble_results_pareto_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv")
     pareto_points.to_csv(pareto_output_path, index=False)
-    logger.info(f"\nSaved Pareto optimal points to {pareto_output_path}")
+    logger.info(f"Saved Pareto optimal points to {pareto_output_path}")
 
 if __name__ == "__main__":
     asyncio.run(main()) 
