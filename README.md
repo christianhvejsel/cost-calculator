@@ -3,7 +3,7 @@ This is a cost calculator for a datacenter powered by solar, batteries, and gas 
 
 It can simulate a datacenter of any load anywhere in the world, with any combination of solar, battery, and gas generation. The output is a Levelized Cost of Energy (LCOE) in $/MWh, and a yearly financial model.
  
-THe code calculates the LCOE using the following steps:
+The code calculates the LCOE using the following steps:
 1. It pulls weather data for the speciifed `(lat, long)`
 2. It simulates the solar power from the weather data
 3. It simulates the powerflow of the system between the solar, battery, generator, and datacenter.
@@ -68,4 +68,4 @@ lcoe = datacenter.calculate_lcoe()
 
 ## Authors
 
-* [bengineer19](https://github.com/bengineer19)
+* [Ben James](https://github.com/bengineer19)
