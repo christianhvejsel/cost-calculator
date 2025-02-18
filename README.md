@@ -66,3 +66,6 @@ datacenter = DataCenter(
 lcoe = datacenter.calculate_lcoe()
 ```
 
+## Authors
+
+* [bengineer19](https://github.com/bengineer19)
