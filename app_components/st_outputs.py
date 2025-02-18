@@ -74,9 +74,9 @@ def display_intro_section():
             }
         </style>
     """, unsafe_allow_html=True)
-    st.title("Solar Datacenter Cost Calculator", anchor="solar-datacenter-cost-calculator")
+    st.title("Solar datacenter cost calculator", anchor="solar-datacenter-cost-calculator")
     st.markdown(
-        '<p style="font-size: 1em; margin-bottom: 20px;">By <a href="https://benjames.io">Ben James</a> and the <a href="https://offgridai.us">OffGridAI</a> team</p>',
+        '<p style="font-size: 1em; margin-bottom: 20px;">By <a href="https://benjames.io">Ben James</a> and the <a href="https://offgridai.us">offgridai.us</a> team</p>',
         unsafe_allow_html=True
     )
     
