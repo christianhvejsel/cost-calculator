@@ -85,7 +85,8 @@ def display_intro_section():
         This tool calculates the cost of electricity for a datacenter powered by solar, batteries, and gas generation.
         1. Input the generation mix, location, and financial assumptions
         2. Solar generation is fetched for the selected location, and solar/battery/generator powerflow is simulated
-        3. The tool calculates the Levelised Cost of Energy (LCOE) of the system.
+        3. The tool calculates the Levelised Cost of Energy (LCOE) of the system. It's designed to let you run scenarios across many designs and locations.
+        4. The code powering this tool is [open-source](https://github.com/offgridai-us/cost-calculator).
         """
     )
 
