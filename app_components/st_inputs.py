@@ -230,16 +230,22 @@ def create_map_input() -> Dict:
     st.subheader("Location")
     st.write("Center the map on your data center location.")
     
-    # Get query parameters
-    query_params = st.query_params
-    initial_lat = float(query_params.get("lat", MAP_INITIAL_LAT))
-    initial_long = float(query_params.get("long", MAP_INITIAL_LONG))
+    if 'map_initial_load' not in st.session_state:
+        st.session_state.map_initial_load = True
+        query_params = st.query_params
+        st.session_state.initial_lat = float(query_params.get("lat", MAP_INITIAL_LAT))
+        st.session_state.initial_long = float(query_params.get("long", MAP_INITIAL_LONG))
     
-    map = folium.Map([initial_lat, initial_long], zoom_start=6, tiles="CartoDB Positron")
+    map = folium.Map(
+        [st.session_state.initial_lat, st.session_state.initial_long],
+        zoom_start=5,
+        tiles="CartoDB Positron"
+    )
 
     def update_map_params():
-        st.query_params["lat"] = st.session_state['folium_map']['center']['lat']
-        st.query_params["long"] = st.session_state['folium_map']['center']['lng']
+        pass
+        # st.query_params["lat"] = st.session_state['folium_map']['center']['lat']
+        # st.query_params["long"] = st.session_state['folium_map']['center']['lng']
 
     st_folium(map, height=370, use_container_width=True, key="folium_map", on_change=update_map_params)
 
@@ -247,7 +253,7 @@ def create_map_input() -> Dict:
     try:
         lat_long_tuple = (st.session_state['folium_map']['center']['lat'], st.session_state['folium_map']['center']['lng'])
     except KeyError:
-        lat_long_tuple = (initial_lat, initial_long)
+        lat_long_tuple = (st.session_state.initial_lat, st.session_state.initial_long)
 
     rg_result = rg.search(lat_long_tuple, mode=1)[0]
     return (*lat_long_tuple, f"{rg_result['name']}, {rg_result['admin1']} ({rg_result['cc']})")
