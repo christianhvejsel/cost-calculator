@@ -303,10 +303,20 @@ def simulate_system(
             data_center_demand_mw,
             operating_year,
         )
+        # Get sample week of data for dashboard
         if operating_year == 1:
-            # Slice 24h * 7 days of data from the middle of the year
-            sample_week_df = result_df[result_df['time_local'].dt.dayofyear.isin(range(182, 189))]
+            # First get all days 182-188 (roughly July 1-7)
+            sample_days_df = result_df[result_df['time_local'].dt.dayofyear.isin(range(182, 189))]
+            
+            # Count number of hours in each year for these days
+            year_counts = sample_days_df.groupby(sample_days_df['time_local'].dt.year).size()
+            # Get the year with the most data points (in case of partial years)
+            best_year = year_counts.idxmax()
+            
+            # Take the data from the year with most complete data
+            sample_week_df = sample_days_df[sample_days_df['time_local'].dt.year == best_year]
             sample_week_df = sample_week_df.reset_index(drop=True)
+        
         solar_mwh_raw_tot = result_df["scaled_solar_generation_mw"].sum()
         solar_mwh_curtailed_tot = result_df["curtailed_solar_mwh"].sum()
         # Append results for the current year
