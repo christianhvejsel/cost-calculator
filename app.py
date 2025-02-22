@@ -138,7 +138,7 @@ def main():
     st.subheader("Levelized Cost of Electricity")
     st.metric("Calculated LCOE", f"${lcoe:.2f}/MWh")
     
-    st.subheader("Capital Breakdown by Year")
+    st.subheader("Financial Model")
     formatted_proforma = format_proforma(pro_forma)
     display_proforma(formatted_proforma)
 
