@@ -14,7 +14,6 @@ from core.datacenter import DataCenter
 from core.powerflow_model import simulate_system, get_solar_ac_dataframe, calculate_energy_mix
 from core.pareto_frontier import process_ensemble_data
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
