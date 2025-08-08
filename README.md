@@ -4,7 +4,7 @@ This is a cost calculator for a datacenter powered by wind, solar, batteries, an
 It can simulate a datacenter of any load anywhere in the world, with any combination of wind, solar, battery, and gas generation. The output is a Levelized Cost of Energy (LCOE) in $/MWh, and a yearly financial model.
  
 The code calculates the LCOE using the following steps:
-1. It pulls weather data for the speciifed `(lat, long)`
+1. It pulls weather data for the specified `(lat, long)`
 2. It simulates the wind and solar power from the weather data
 3. It simulates the powerflow of the system between the wind, solar, battery, generator, and datacenter.
 4. It calculates the annual cashflows and the LCOE of the system.
@@ -57,7 +57,7 @@ datacenter = DataCenter(
     generator=125, 
     generator_type="Gas Engine",
     # CAPEX rates
-    wind_solar_capex_total_dollar_per_w = 0.45,
+    wind_solar_capex_total_dollar_per_w=0.45,
     solar_capex_total_dollar_per_w=0.25,
     bess_capex_total_dollar_per_kwh=0.10,
     # O&M rates
